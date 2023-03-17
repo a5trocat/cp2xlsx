@@ -5,9 +5,14 @@ description = "Convert Check Point exported policy package into xlsx document."
 authors = ["Alexander Bodrukhin <bodrukhinaa@sibintek.ru>"]
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = ">=3.9,<3.12"
+xlsxwriter = "^3.0.9"
 
 [tool.poetry.dev-dependencies]
+
+[tool.poetry.group.dev.dependencies]
+pylint = "^2.17.0"
+pyinstaller = "^5.9.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
