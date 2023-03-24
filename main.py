@@ -7,7 +7,7 @@ import json
 
 import xlsxwriter
 
-VERSION = '1.2'
+VERSION = '1.2a'
 
 class Cp2xlsx:
     def __init__(self, package: str) -> None:
@@ -16,20 +16,20 @@ class Cp2xlsx:
         self.package_name = self._index_['policyPackages'][0]['packageName']
         self.wb = xlsxwriter.Workbook(f'{self.package_name}.xlsx')
         self.init_styles()
-        # threads = []
-        # if self._net_:
-        #     threads.append(Thread(target=self.gen_firewall_sheet))
-        # if self._nat_:
-        #     threads.append(Thread(target=self.gen_nat_sheet))
-        # if self._tp_:
-        #     threads.append(Thread(target=self.gen_tp_sheet))
-        # for thread in threads:
-        #     thread.start()
-        # for thread in threads:
-        #     thread.join()
-        self.gen_firewall_sheet()
-        self.gen_nat_sheet()
-        self.gen_tp_sheet()
+        threads = []
+        if self._net_:
+            threads.append(Thread(target=self.gen_firewall_sheet))
+        if self._nat_:
+            threads.append(Thread(target=self.gen_nat_sheet))
+        if self._tp_:
+            threads.append(Thread(target=self.gen_tp_sheet))
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        # self.gen_firewall_sheet()
+        # self.gen_nat_sheet()
+        # self.gen_tp_sheet()
         self.wb.close()
 
     def get_filename(self) -> str:
@@ -158,7 +158,7 @@ class Cp2xlsx:
                 uid = uid['uid']
             obj = self.find_obj_by_uid(uid)
             if 'group' in obj['type']:
-                return self.expand_group(obj['members'])
+                result = result + self.expand_group(obj['members'])
             else:
                 result = result + [uid]
         return result
@@ -196,7 +196,7 @@ class Cp2xlsx:
                     style = self.style_data_dis
                 ws.write(row, 0, self._net_[i]['rule-number'], style)
                 try:
-                    hits = self._net_[i]['hits']['percentage']
+                    hits = self._net_[i]['hits']['value']
                 except KeyError:
                     hits = ''
                 ws.write(row, 1, hits, style)
