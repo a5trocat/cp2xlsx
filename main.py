@@ -298,7 +298,8 @@ class Cp2xlsx:
                 self._cached_groups_[uid] = expanded
             else:
                 result = result + [uid]
-        return result
+        # возвращаем результат без дубликатов
+        return list(dict.fromkeys(result))
 
     def gen_firewall_sheet(self, name: str, net_table: json) -> None:
         """Генерация страницы с правилами файрволла
