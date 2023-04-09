@@ -81,7 +81,7 @@ class Cp2xlsx:
         print(f"Thread {name} started.")
         result = target(*args)
         stop_time = time.perf_counter()
-        print(f"Therad {name} finished in {stop_time-start_time: 0.2f}s.")
+        print(f"Thread {name} finished in {stop_time-start_time: 0.2f}s.")
         return result
 
     def get_filename(self) -> str:
@@ -120,7 +120,7 @@ class Cp2xlsx:
         default = {'valign': 'vcenter', 'border': True}
         self.style_default = self.wb.add_format(default)
 
-        title = {**default, **{'font_size': '12', 'bold': True, 'bottom': True, 'align': 'center'}}
+        title = {**default, **{'font_size': '12', 'bold': True, 'bottom': True, 'align': 'center', 'font_color': 'white', 'bg_color': 'gray'}}
         self.style_title = self.wb.add_format(title)
         
         section = {**default, **{'bold': True, 'align': 'center', 'bg_color': 'yellow'}}
@@ -140,6 +140,25 @@ class Cp2xlsx:
 
         data_dis_neg = {**data_neg, **data_dis}
         self.style_data_dis_neg = self.wb.add_format(data_dis_neg)
+
+    def style_picker(self, enabled: bool = True, negated: bool = False) -> xlsxwriter.workbook.Format:
+        """Возвращает стиль для ячейки правила.
+
+        Args:
+            enabled (bool, optional): Правило включено. Defaults to True.
+            negated (bool, optional): Значение ячейки отрицательное. Defaults to False.
+
+        Returns:
+            xlsxwriter.workbook.Format: Стиль
+        """
+        if enabled and not negated:
+            return self.style_data
+        if enabled and negated:
+            return self.style_data_neg
+        if not enabled and not negated:
+            return self.style_data_dis
+        if not enabled and negated:
+            return self.style_data_dis_neg
 
     def load_package(self, package: str) -> None:
         """Загрузка файлов json из архива политики
@@ -288,15 +307,18 @@ class Cp2xlsx:
             name (str): Имя страницы
             net_table (json): объект с правилами файрволла
         """
+
         ws = self.wb.add_worksheet(name)
         ws.set_column('A:A', 5)
         ws.set_column('B:B', 5)
         ws.set_column('C:C', 20)
-        ws.set_column('D:E', 50)
-        ws.set_column('F:G', 20)
+        ws.set_column('D:E', 40)
+        ws.set_column('F:F', 15)
+        ws.set_column('G:G', 20)
         ws.set_column('H:I', 10)
-        ws.set_column('J:J', 20)
+        ws.set_column('J:J', 15)
         ws.set_column('K:K', 40)
+        ws.set_column('L:L', 40)
 
         ws.write('A1', '№', self.style_title)
         ws.write('B1', 'Hits', self.style_title)
@@ -308,54 +330,57 @@ class Cp2xlsx:
         ws.write('H1', 'Action', self.style_title)
         ws.write('I1', 'Track', self.style_title)
         ws.write('J1', 'Time', self.style_title)
-        ws.write('K1', 'Comment', self.style_title)
+        ws.write('K1', 'Install on', self.style_title)
+        ws.write('L1', 'Comment', self.style_title)
+        ws.freeze_panes(1, 0)
 
         for i in range(len(net_table)):
             row = i + 1
-            style = self.style_data
             if net_table[i]['type'] == "place-holder":
                 ws.write(row, 0, net_table[i]['rule-number'], self.style_placeholder)
-                ws.merge_range(row, 1, row, 10, net_table[i]['name'], self.style_placeholder)
+                ws.merge_range(row, 1, row, 11, net_table[i]['name'], self.style_placeholder)
             elif net_table[i]['type'] == "access-section":
-                ws.merge_range(row, 0, row, 10, net_table[i]['name'], self.style_section)
+                ws.merge_range(row, 0, row, 11, net_table[i]['name'], self.style_section)
             else:
-                if not net_table[i]['enabled']:
-                    style = self.style_data_dis
-                ws.write(row, 0, net_table[i]['rule-number'], style)
+                ws.write(row, 0, net_table[i]['rule-number'], self.style_picker(net_table[i]['enabled']))
+                
                 try:
                     hits = net_table[i]['hits']['value']
                 except KeyError:
                     hits = ''
-                ws.write(row, 1, hits, style)
+                ws.write(row, 1, hits, self.style_picker(net_table[i]['enabled']))
+                
                 try:
                     name = net_table[i]['name']
                 except KeyError:
                     name = ''
-                ws.write(row, 2, name, style)
+                ws.write(row, 2, name, self.style_picker(net_table[i]['enabled']))
+                
                 source = self.list_to_str(self.decode_uid_list(self.expand_group(net_table[i]['source'])))
-                if net_table[i]['source-negate']:
-                    ws.write(row, 3, source, self.style_data_neg)
-                else:
-                    ws.write(row, 3, source, style)
+                ws.write(row, 3, source, self.style_picker(net_table[i]['enabled'], net_table[i]['source-negate']))
+                
                 destination = self.list_to_str(self.decode_uid_list(self.expand_group(net_table[i]['destination'])))
-                if net_table[i]['destination-negate']:
-                    ws.write(row, 4, destination, self.style_data_neg)
-                else:
-                    ws.write(row, 4, destination, style)
+                ws.write(row, 4, destination, self.style_picker(net_table[i]['enabled'], net_table[i]['destination-negate']))
+                
                 vpn = self.list_to_str(self.decode_uid_list(self.expand_group(net_table[i]['vpn'])))
-                ws.write(row, 5, vpn, style)
+                ws.write(row, 5, vpn, self.style_picker(net_table[i]['enabled']))
+                
                 service = self.list_to_str(self.decode_uid_list(self.expand_group(net_table[i]['service'])))
-                if net_table[i]['service-negate']:
-                    ws.write(row, 6, service, self.style_data_neg)
-                else:
-                    ws.write(row, 6, service, style)
+                ws.write(row, 6, service, self.style_picker(net_table[i]['enabled'], net_table[i]['service-negate']))
+                
                 action = self.list_to_str(self.decode_uid(net_table[i]['action']))
-                ws.write(row, 7, action, style)
+                ws.write(row, 7, action, self.style_picker(net_table[i]['enabled']))
+                
                 track = self.list_to_str(self.decode_uid(net_table[i]['track']['type']))
-                ws.write(row, 8, track, style)
+                ws.write(row, 8, track, self.style_picker(net_table[i]['enabled']))
+                
                 time = self.list_to_str(self.decode_uid_list(self.expand_group(net_table[i]['time'])))
-                ws.write(row, 9, time, style)
-                ws.write(row, 10, net_table[i]['comments'], style)
+                ws.write(row, 9, time, self.style_picker(net_table[i]['enabled']))
+                
+                install_on = self.list_to_str(self.decode_uid_list(self.expand_group(net_table[i]['install-on'])))
+                ws.write(row, 10, install_on, self.style_picker(net_table[i]['enabled']))
+                
+                ws.write(row, 11, net_table[i]['comments'], self.style_picker(net_table[i]['enabled']))
 
     def gen_nat_sheet(self) -> None:
         """Генерация странцы NAT
@@ -366,6 +391,7 @@ class Cp2xlsx:
         ws.set_column('D:D', 20)
         ws.set_column('E:F', 50)
         ws.set_column('G:G', 20)
+        ws.set_column('I:I', 50)
         ws.set_column('H:H', 40)
 
         ws.write('A1', '№', self.style_title)
@@ -375,30 +401,39 @@ class Cp2xlsx:
         ws.write('E1', 'Translated Source', self.style_title)
         ws.write('F1', 'Translated Destination', self.style_title)
         ws.write('G1', 'Translated Services', self.style_title)
-        ws.write('H1', 'Comments', self.style_title)
+        ws.write('H1', 'Install on', self.style_title)
+        ws.write('I1', 'Comments', self.style_title)
+        ws.freeze_panes(1, 0)
 
         for i in range(len(self._nat_)):
             row = i + 1
-            style = self.style_data
             if self._nat_[i]['type'] == "nat-section":
-                ws.merge_range(row, 0, row, 7, self._nat_[i]['name'], self.style_section)
+                ws.merge_range(row, 0, row, 8, self._nat_[i]['name'], self.style_section)
             else:
-                if not self._nat_[i]['enabled']:
-                    style = self.style_data_dis
-                ws.write(row, 0, self._nat_[i]['rule-number'], style)
+                ws.write(row, 0, self._nat_[i]['rule-number'], self.style_picker(self._nat_[i]['enabled']))
+                
                 o_source = self.list_to_str(self.decode_uid_list(self.expand_group(self._nat_[i]['original-source'])))
-                ws.write(row, 1, o_source, style)
+                ws.write(row, 1, o_source, self.style_picker(self._nat_[i]['enabled']))
+                
                 o_destination = self.list_to_str(self.decode_uid_list(self.expand_group(self._nat_[i]['original-destination'])))
-                ws.write(row, 2, o_destination, style)
+                ws.write(row, 2, o_destination, self.style_picker(self._nat_[i]['enabled']))
+                
                 o_service = self.list_to_str(self.decode_uid_list(self.expand_group(self._nat_[i]['original-service'])))
-                ws.write(row, 3, o_service, style)
+                ws.write(row, 3, o_service, self.style_picker(self._nat_[i]['enabled']))
+                
                 t_source = self.list_to_str(self.decode_uid_list(self.expand_group(self._nat_[i]['translated-source'])))
-                ws.write(row, 4, t_source, style)
+                ws.write(row, 4, t_source, self.style_picker(self._nat_[i]['enabled']))
+                
                 t_destination = self.list_to_str(self.decode_uid_list(self.expand_group(self._nat_[i]['translated-destination'])))
-                ws.write(row, 5, t_destination, style)
+                ws.write(row, 5, t_destination, self.style_picker(self._nat_[i]['enabled']))
+                
                 t_service = self.list_to_str(self.decode_uid_list(self.expand_group(self._nat_[i]['translated-service'])))
-                ws.write(row, 6, t_service, style)
-                ws.write(row, 7, self._nat_[i]['comments'], style)
+                ws.write(row, 6, t_service, self.style_picker(self._nat_[i]['enabled']))
+                
+                install_on = self.list_to_str(self.decode_uid_list(self.expand_group(self._nat_[i]['install-on'])))
+                ws.write(row, 7, install_on, self.style_picker(self._nat_[i]['enabled']))
+
+                ws.write(row, 8, self._nat_[i]['comments'], self.style_picker(self._nat_[i]['enabled']))
 
     def gen_tp_sheet(self) -> None:
         """Генерация страницы Threat prevention
@@ -409,7 +444,8 @@ class Cp2xlsx:
         ws.set_column('D:E', 50)
         ws.set_column('F:F', 20)
         ws.set_column('G:I', 10)
-        ws.set_column('J:J', 40)
+        ws.set_column('J:J', 50)
+        ws.set_column('K:K', 40)
 
         ws.write('A1', '№', self.style_title)
         ws.write('B1', 'Name', self.style_title)
@@ -420,50 +456,49 @@ class Cp2xlsx:
         ws.write('G1', 'Services', self.style_title)
         ws.write('H1', 'Action', self.style_title)
         ws.write('I1', 'Track', self.style_title)
-        ws.write('J1', 'Comments', self.style_title)
+        ws.write('J1', 'Install on', self.style_title)
+        ws.write('K1', 'Comments', self.style_title)
+        ws.freeze_panes(1, 0)
 
         for i in range(len(self._tp_)):
             row = i + 1
-            style = self.style_data
             if self._tp_[i]['type'] == "threat-section":
-                ws.merge_range(row, 0, row, 9, self._tp_[i]['name'], self.style_section)
+                ws.merge_range(row, 0, row, 10, self._tp_[i]['name'], self.style_section)
             else:
-                if not self._tp_[i]['enabled']:
-                    style = self.style_data_dis
-                ws.write(row, 0, self._tp_[i]['rule-number'], style)
+                ws.write(row, 0, self._tp_[i]['rule-number'], self.style_picker(self._tp_[i]['enabled']))
+
                 try:
                     name = self._tp_[i]['name']
                 except KeyError:
                     name = ''
-                ws.write(row, 1, name, style)
+                ws.write(row, 1, name, self.style_picker(self._tp_[i]['enabled']))
+
                 p_scope = self.list_to_str(self.decode_uid_list(self.expand_group(self._tp_[i]['protected-scope'])))
-                if self._tp_[i]['protected-scope-negate']:
-                    ws.write(row, 2, p_scope, self.style_data_neg)
-                else:
-                    ws.write(row, 2, p_scope, style)
+                ws.write(row, 2, p_scope, self.style_picker(self._tp_[i]['enabled'], self._tp_[i]['protected-scope-negate']))
+
                 source = self.list_to_str(self.decode_uid_list(self.expand_group(self._tp_[i]['source'])))
-                if self._tp_[i]['source-negate']:
-                    ws.write(row, 3, source, self.style_data_neg)
-                else:
-                    ws.write(row, 3, source, style)
+                ws.write(row, 3, source, self.style_picker(self._tp_[i]['enabled'], self._tp_[i]['source-negate']))
+
                 destination = self.list_to_str(self.decode_uid_list(self.expand_group(self._tp_[i]['destination'])))
-                if self._tp_[i]['destination-negate']:
-                    ws.write(row, 4, destination, self.style_data_neg)
-                else:
-                    ws.write(row, 4, destination, style)
+                ws.write(row, 4, destination, self.style_picker(self._tp_[i]['enabled'], self._tp_[i]['destination-negate']))
+
                 p_site = 'N/A'
-                ws.write(row, 5, p_site, style)
+                ws.write(row, 5, p_site, self.style_picker(self._tp_[i]['enabled']))
+
                 service = self.list_to_str(self.decode_uid_list(self.expand_group(self._tp_[i]['service'])))
-                if self._tp_[i]['service-negate']:
-                    ws.write(row, 6, service, self.style_data_neg)
-                else:
-                    ws.write(row, 6, service, style)
+                ws.write(row, 6, service, self.style_picker(self._tp_[i]['enabled'], self._tp_[i]['service-negate']))
+
                 action = self.list_to_str(self.decode_uid(self._tp_[i]['action']))
-                ws.write(row, 7, action, style)
+                ws.write(row, 7, action, self.style_picker(self._tp_[i]['enabled']))
+
                 track = self.list_to_str(self.decode_uid(self._tp_[i]['track']))
-                ws.write(row, 8, track, style)
-                ws.write(row, 9, self._tp_[i]['comments'], style)
-        
+                ws.write(row, 8, track, self.style_picker(self._tp_[i]['enabled']))
+
+                install_on = self.list_to_str(self.decode_uid_list(self.expand_group(self._tp_[i]['install-on'])))
+                ws.write(row, 9, install_on, self.style_picker(self._tp_[i]['enabled']))
+
+                ws.write(row, 10, self._tp_[i]['comments'], self.style_picker(self._tp_[i]['enabled']))
+
 
 def main(args):
     print(f"cp2xlsx80 ver. {VERSION}")
