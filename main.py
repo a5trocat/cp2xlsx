@@ -205,7 +205,7 @@ class Cp2xlsx:
                     continue
 
     def find_obj_by_uid(self, uid: str) -> dict:
-        """Поиск объекта по его uid. Используется кэширование.
+        """Поиск объекта по его uid. Используется кеширование.
 
         Args:
             uid (str): uid объекта
@@ -221,7 +221,7 @@ class Cp2xlsx:
                 return obj
 
     def decode_uid(self, uid: str) -> str:
-        """Расшифровка объекта. Используется кэширование.
+        """Расшифровка объекта. Используется кеширование.
 
         Args:
             uid (str): uid объекта
@@ -274,7 +274,7 @@ class Cp2xlsx:
         return '\n'.join(l)
 
     def expand_group(self, uids: list) -> list:
-        """Раскрытие группы объектов. Используется кэширование.
+        """Раскрытие группы объектов. Используется кеширование.
 
         Args:
             uids (list): массив uid объектов
