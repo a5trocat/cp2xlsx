@@ -7,7 +7,7 @@ import json
 
 import xlsxwriter
 
-VERSION = '1.3'
+VERSION = '1.3.1'
 
 class Cp2xlsx:
     def __init__(self, package: str) -> None:
@@ -300,6 +300,40 @@ class Cp2xlsx:
                 result = result + [uid]
         # возвращаем результат без дубликатов
         return list(dict.fromkeys(result))
+    
+    def write(self, ws: xlsxwriter.workbook.Worksheet, row: int, extra_row:int, col:int, extra_col:int, data:str, format:xlsxwriter.workbook.Format):
+        """Обертка для функций xlsxwriter merge_range и write.
+
+        Args:
+            ws (xlsxwriter.workbook.Worksheet): рабочая страница
+            row (int): номер строка
+            extra_row (int): сколько последующих строк объеденить
+            col (int): номер столбца
+            extra_col (int): сколько последующих столбцов объеденить
+            data (str): данные
+            format (xlsxwriter.workbook.Format): формат
+        """
+        if extra_row or extra_col:
+            ws.merge_range(row, col, row + extra_row, col + extra_col, data, format)
+        else:
+            ws.write(row, col, data, format)
+
+    def truncate_string(self, string) -> list:
+        """Разбитие строки на несколько
+
+        Args:
+            string (_type_): исходная строка
+
+        Returns:
+            list: массив строк
+        """
+        result = []
+        while len(string) > 32767:
+            last_new_line = string[:32767].rindex('\n')
+            result.append(string[:last_new_line])
+            string = string[last_new_line+1:]
+        result.append(string)
+        return result
 
     def gen_firewall_sheet(self, name: str, net_table: json) -> None:
         """Генерация страницы с правилами файрволла
@@ -311,7 +345,7 @@ class Cp2xlsx:
 
         ws = self.wb.add_worksheet(name)
         ws.set_column('A:A', 5)
-        ws.set_column('B:B', 5)
+        ws.set_column('B:B', 10)
         ws.set_column('C:C', 20)
         ws.set_column('D:E', 40)
         ws.set_column('F:F', 15)
@@ -321,67 +355,76 @@ class Cp2xlsx:
         ws.set_column('K:K', 40)
         ws.set_column('L:L', 40)
 
-        ws.write('A1', '№', self.style_title)
-        ws.write('B1', 'Hits', self.style_title)
-        ws.write('C1', 'Name', self.style_title)
-        ws.write('D1', 'Source', self.style_title)
-        ws.write('E1', 'Destinaton', self.style_title)
-        ws.write('F1', 'VPN', self.style_title)
-        ws.write('G1', 'Service', self.style_title)
-        ws.write('H1', 'Action', self.style_title)
-        ws.write('I1', 'Track', self.style_title)
-        ws.write('J1', 'Time', self.style_title)
-        ws.write('K1', 'Install on', self.style_title)
-        ws.write('L1', 'Comment', self.style_title)
+        self.write(ws, 0, 0, 0, 0, '№', self.style_title)
+        self.write(ws, 0, 0, 1, 0, 'Hits', self.style_title)
+        self.write(ws, 0, 0, 2, 0, 'Name', self.style_title)
+        self.write(ws, 0, 0, 3, 0, 'Source', self.style_title)
+        self.write(ws, 0, 0, 4, 0, 'Destinaton', self.style_title)
+        self.write(ws, 0, 0, 5, 0, 'VPN', self.style_title)
+        self.write(ws, 0, 0, 6, 0, 'Service', self.style_title)
+        self.write(ws, 0, 0, 7, 0, 'Action', self.style_title)
+        self.write(ws, 0, 0, 8, 0, 'Track', self.style_title)
+        self.write(ws, 0, 0, 9, 0, 'Time', self.style_title)
+        self.write(ws, 0, 0, 10, 0, 'Install on', self.style_title)
+        self.write(ws, 0, 0, 11, 0, 'Comment', self.style_title)
         ws.freeze_panes(1, 0)
 
-        for i in range(len(net_table)):
-            row = i + 1
-            if net_table[i]['type'] == "place-holder":
-                ws.write(row, 0, net_table[i]['rule-number'], self.style_placeholder)
-                ws.merge_range(row, 1, row, 11, net_table[i]['name'], self.style_placeholder)
-            elif net_table[i]['type'] == "access-section":
-                ws.merge_range(row, 0, row, 11, net_table[i]['name'], self.style_section)
+        row = 1
+        for entry in net_table:
+            if entry['type'] == "place-holder":
+                self.write(ws, row, 0, 0, 0, str(entry['rule-number']), self.style_placeholder)
+                self.write(ws, row, 0, 1, 10, entry['name'], self.style_placeholder)
+            elif entry['type'] == "access-section":
+                self.write(ws, row, 0, 0, 11, entry['name'], self.style_section)
             else:
-                ws.write(row, 0, net_table[i]['rule-number'], self.style_picker(net_table[i]['enabled']))
-                
+                rule_number = str(entry['rule-number'])
                 try:
-                    hits = net_table[i]['hits']['value']
+                    hits = str(entry['hits']['value'])
                 except KeyError:
                     hits = ''
-                ws.write(row, 1, hits, self.style_picker(net_table[i]['enabled']))
-                
                 try:
-                    name = net_table[i]['name']
+                    name = entry['name']
                 except KeyError:
                     name = ''
-                ws.write(row, 2, name, self.style_picker(net_table[i]['enabled']))
+                source = self.truncate_string(self.list_to_str(self.decode_uid_list(self.expand_group(entry['source']))))
+                s_trunkated_len = len(source)
+                destination = self.truncate_string(self.list_to_str(self.decode_uid_list(self.expand_group(entry['destination']))))
+                d_trunkated_len = len(destination)
+                extra_rows = max(s_trunkated_len, d_trunkated_len) - 1
+                vpn = self.list_to_str(self.decode_uid_list(self.expand_group(entry['vpn'])))
+                service = self.list_to_str(self.decode_uid_list(self.expand_group(entry['service'])))
+                action = self.list_to_str(self.decode_uid(entry['action']))
+                track = self.list_to_str(self.decode_uid(entry['track']['type']))
+                time = self.list_to_str(self.decode_uid_list(self.expand_group(entry['time'])))
+                install_on = self.list_to_str(self.decode_uid_list(self.expand_group(entry['install-on'])))
+                comments = entry['comments']
                 
-                source = self.list_to_str(self.decode_uid_list(self.expand_group(net_table[i]['source'])))
-                ws.write(row, 3, source, self.style_picker(net_table[i]['enabled'], net_table[i]['source-negate']))
-                
-                destination = self.list_to_str(self.decode_uid_list(self.expand_group(net_table[i]['destination'])))
-                ws.write(row, 4, destination, self.style_picker(net_table[i]['enabled'], net_table[i]['destination-negate']))
-                
-                vpn = self.list_to_str(self.decode_uid_list(self.expand_group(net_table[i]['vpn'])))
-                ws.write(row, 5, vpn, self.style_picker(net_table[i]['enabled']))
-                
-                service = self.list_to_str(self.decode_uid_list(self.expand_group(net_table[i]['service'])))
-                ws.write(row, 6, service, self.style_picker(net_table[i]['enabled'], net_table[i]['service-negate']))
-                
-                action = self.list_to_str(self.decode_uid(net_table[i]['action']))
-                ws.write(row, 7, action, self.style_picker(net_table[i]['enabled']))
-                
-                track = self.list_to_str(self.decode_uid(net_table[i]['track']['type']))
-                ws.write(row, 8, track, self.style_picker(net_table[i]['enabled']))
-                
-                time = self.list_to_str(self.decode_uid_list(self.expand_group(net_table[i]['time'])))
-                ws.write(row, 9, time, self.style_picker(net_table[i]['enabled']))
-                
-                install_on = self.list_to_str(self.decode_uid_list(self.expand_group(net_table[i]['install-on'])))
-                ws.write(row, 10, install_on, self.style_picker(net_table[i]['enabled']))
-                
-                ws.write(row, 11, net_table[i]['comments'], self.style_picker(net_table[i]['enabled']))
+                self.write(ws, row, extra_rows, 0, 0, rule_number, self.style_picker(entry['enabled']))
+                self.write(ws, row, extra_rows, 1, 0, hits, self.style_picker(entry['enabled']))
+                self.write(ws, row, extra_rows, 2, 0, name, self.style_picker(entry['enabled']))
+                row_for_data = extra_rows // s_trunkated_len
+                s_rows_remain = extra_rows
+                for i in range(s_trunkated_len):
+                    if s_rows_remain < row_for_data:
+                        row_for_data = s_rows_remain
+                    self.write(ws, row+i, row_for_data, 3, 0, source[i], self.style_picker(entry['enabled'], entry['source-negate']))
+                    s_rows_remain = s_rows_remain - row_for_data
+                row_for_data = extra_rows // d_trunkated_len
+                d_rows_remain = extra_rows
+                for i in range(d_trunkated_len):
+                    if d_rows_remain < row_for_data:
+                        row_for_data = d_rows_remain
+                    self.write(ws, row+i, row_for_data, 4, 0, destination[i], self.style_picker(entry['enabled'], entry['destination-negate']))
+                    d_rows_remain = d_rows_remain - row_for_data
+                self.write(ws, row, extra_rows, 5, 0, vpn, self.style_picker(entry['enabled']))
+                self.write(ws, row, extra_rows, 6, 0, service, self.style_picker(entry['enabled'], entry['service-negate']))
+                self.write(ws, row, extra_rows, 7, 0, action, self.style_picker(entry['enabled']))
+                self.write(ws, row, extra_rows, 8, 0, track, self.style_picker(entry['enabled']))
+                self.write(ws, row, extra_rows, 9, 0, time, self.style_picker(entry['enabled']))
+                self.write(ws, row, extra_rows, 10, 0, install_on, self.style_picker(entry['enabled']))
+                self.write(ws, row, extra_rows, 11, 0, comments, self.style_picker(entry['enabled']))
+                row = row + extra_rows
+            row = row + 1
 
     def gen_nat_sheet(self) -> None:
         """Генерация странцы NAT
@@ -395,46 +438,42 @@ class Cp2xlsx:
         ws.set_column('I:I', 50)
         ws.set_column('H:H', 40)
 
-        ws.write('A1', '№', self.style_title)
-        ws.write('B1', 'Original Source', self.style_title)
-        ws.write('C1', 'Original Destination', self.style_title)
-        ws.write('D1', 'Original Services', self.style_title)
-        ws.write('E1', 'Translated Source', self.style_title)
-        ws.write('F1', 'Translated Destination', self.style_title)
-        ws.write('G1', 'Translated Services', self.style_title)
-        ws.write('H1', 'Install on', self.style_title)
-        ws.write('I1', 'Comments', self.style_title)
+        self.write(ws, 0, 0, 0, 0, '№', self.style_title)
+        self.write(ws, 0, 0, 1, 0, 'Original Source', self.style_title)
+        self.write(ws, 0, 0, 2, 0, 'Original Destination', self.style_title)
+        self.write(ws, 0, 0, 3, 0, 'Original Services', self.style_title)
+        self.write(ws, 0, 0, 4, 0, 'Translated Source', self.style_title)
+        self.write(ws, 0, 0, 5, 0, 'Translated Destination', self.style_title)
+        self.write(ws, 0, 0, 6, 0, 'Translated Services', self.style_title)
+        self.write(ws, 0, 0, 7, 0, 'Install on', self.style_title)
+        self.write(ws, 0, 0, 8, 0, 'Comments', self.style_title)
         ws.freeze_panes(1, 0)
 
-        for i in range(len(self._nat_)):
-            row = i + 1
-            if self._nat_[i]['type'] == "nat-section":
-                ws.merge_range(row, 0, row, 8, self._nat_[i]['name'], self.style_section)
+        row = 1
+        for entry in self._nat_:
+            if entry['type'] == "nat-section":
+                self.write(ws, row, 0, 0, 8, entry['name'], self.style_section)
             else:
-                ws.write(row, 0, self._nat_[i]['rule-number'], self.style_picker(self._nat_[i]['enabled']))
+                rule_number = str(entry['rule-number'])
+                o_source = self.list_to_str(self.decode_uid_list(self.expand_group(entry['original-source'])))
+                o_destination = self.list_to_str(self.decode_uid_list(self.expand_group(entry['original-destination'])))
+                o_service = self.list_to_str(self.decode_uid_list(self.expand_group(entry['original-service'])))
+                t_source = self.list_to_str(self.decode_uid_list(self.expand_group(entry['translated-source'])))
+                t_destination = self.list_to_str(self.decode_uid_list(self.expand_group(entry['translated-destination'])))
+                t_service = self.list_to_str(self.decode_uid_list(self.expand_group(entry['translated-service'])))
+                install_on = self.list_to_str(self.decode_uid_list(self.expand_group(entry['install-on'])))
+                comments = entry['comments']
                 
-                o_source = self.list_to_str(self.decode_uid_list(self.expand_group(self._nat_[i]['original-source'])))
-                ws.write(row, 1, o_source, self.style_picker(self._nat_[i]['enabled']))
-                
-                o_destination = self.list_to_str(self.decode_uid_list(self.expand_group(self._nat_[i]['original-destination'])))
-                ws.write(row, 2, o_destination, self.style_picker(self._nat_[i]['enabled']))
-                
-                o_service = self.list_to_str(self.decode_uid_list(self.expand_group(self._nat_[i]['original-service'])))
-                ws.write(row, 3, o_service, self.style_picker(self._nat_[i]['enabled']))
-                
-                t_source = self.list_to_str(self.decode_uid_list(self.expand_group(self._nat_[i]['translated-source'])))
-                ws.write(row, 4, t_source, self.style_picker(self._nat_[i]['enabled']))
-                
-                t_destination = self.list_to_str(self.decode_uid_list(self.expand_group(self._nat_[i]['translated-destination'])))
-                ws.write(row, 5, t_destination, self.style_picker(self._nat_[i]['enabled']))
-                
-                t_service = self.list_to_str(self.decode_uid_list(self.expand_group(self._nat_[i]['translated-service'])))
-                ws.write(row, 6, t_service, self.style_picker(self._nat_[i]['enabled']))
-                
-                install_on = self.list_to_str(self.decode_uid_list(self.expand_group(self._nat_[i]['install-on'])))
-                ws.write(row, 7, install_on, self.style_picker(self._nat_[i]['enabled']))
-
-                ws.write(row, 8, self._nat_[i]['comments'], self.style_picker(self._nat_[i]['enabled']))
+                self.write(ws, row, 0, 0, 0, rule_number, self.style_picker(entry['enabled']))
+                self.write(ws, row, 0, 1, 0, o_source, self.style_picker(entry['enabled']))
+                self.write(ws, row, 0, 2, 0, o_destination, self.style_picker(entry['enabled']))
+                self.write(ws, row, 0, 3, 0, o_service, self.style_picker(entry['enabled']))
+                self.write(ws, row, 0, 4, 0, t_source, self.style_picker(entry['enabled']))
+                self.write(ws, row, 0, 5, 0, t_destination, self.style_picker(entry['enabled']))
+                self.write(ws, row, 0, 6, 0, t_service, self.style_picker(entry['enabled']))
+                self.write(ws, row, 0, 7, 0, install_on, self.style_picker(entry['enabled']))
+                self.write(ws, row, 0, 8, 0, comments, self.style_picker(entry['enabled']))
+            row = row + 1
 
     def gen_tp_sheet(self) -> None:
         """Генерация страницы Threat prevention
@@ -448,57 +487,51 @@ class Cp2xlsx:
         ws.set_column('J:J', 50)
         ws.set_column('K:K', 40)
 
-        ws.write('A1', '№', self.style_title)
-        ws.write('B1', 'Name', self.style_title)
-        ws.write('C1', 'Protected Scope', self.style_title)
-        ws.write('D1', 'Source', self.style_title)
-        ws.write('E1', 'Destination', self.style_title)
-        ws.write('F1', 'Protection/Site', self.style_title)
-        ws.write('G1', 'Services', self.style_title)
-        ws.write('H1', 'Action', self.style_title)
-        ws.write('I1', 'Track', self.style_title)
-        ws.write('J1', 'Install on', self.style_title)
-        ws.write('K1', 'Comments', self.style_title)
+        self.write(ws, 0, 0, 0, 0, '№', self.style_title)
+        self.write(ws, 0, 0, 1, 0, 'Name', self.style_title)
+        self.write(ws, 0, 0, 2, 0, 'Protected Scope', self.style_title)
+        self.write(ws, 0, 0, 3, 0, 'Source', self.style_title)
+        self.write(ws, 0, 0, 4, 0, 'Destination', self.style_title)
+        self.write(ws, 0, 0, 5, 0, 'Protection/Site', self.style_title)
+        self.write(ws, 0, 0, 6, 0, 'Services', self.style_title)
+        self.write(ws, 0, 0, 7, 0, 'Action', self.style_title)
+        self.write(ws, 0, 0, 8, 0, 'Track', self.style_title)
+        self.write(ws, 0, 0, 9, 0, 'Install on', self.style_title)
+        self.write(ws, 0, 0, 10, 0, 'Comments', self.style_title)
         ws.freeze_panes(1, 0)
 
-        for i in range(len(self._tp_)):
-            row = i + 1
-            if self._tp_[i]['type'] == "threat-section":
-                ws.merge_range(row, 0, row, 10, self._tp_[i]['name'], self.style_section)
+        row = 1
+        for entry in self._tp_:
+            if entry['type'] == "threat-section":
+                self.write(ws, row, 0, 0, 10, entry['name'], self.style_section)
             else:
-                ws.write(row, 0, self._tp_[i]['rule-number'], self.style_picker(self._tp_[i]['enabled']))
-
+                rule_number = str(entry['rule-number'])
                 try:
-                    name = self._tp_[i]['name']
+                    name = entry['name']
                 except KeyError:
                     name = ''
-                ws.write(row, 1, name, self.style_picker(self._tp_[i]['enabled']))
-
-                p_scope = self.list_to_str(self.decode_uid_list(self.expand_group(self._tp_[i]['protected-scope'])))
-                ws.write(row, 2, p_scope, self.style_picker(self._tp_[i]['enabled'], self._tp_[i]['protected-scope-negate']))
-
-                source = self.list_to_str(self.decode_uid_list(self.expand_group(self._tp_[i]['source'])))
-                ws.write(row, 3, source, self.style_picker(self._tp_[i]['enabled'], self._tp_[i]['source-negate']))
-
-                destination = self.list_to_str(self.decode_uid_list(self.expand_group(self._tp_[i]['destination'])))
-                ws.write(row, 4, destination, self.style_picker(self._tp_[i]['enabled'], self._tp_[i]['destination-negate']))
-
+                p_scope = self.list_to_str(self.decode_uid_list(self.expand_group(entry['protected-scope'])))
+                source = self.list_to_str(self.decode_uid_list(self.expand_group(entry['source'])))
+                destination = self.list_to_str(self.decode_uid_list(self.expand_group(entry['destination'])))
                 p_site = 'N/A'
-                ws.write(row, 5, p_site, self.style_picker(self._tp_[i]['enabled']))
+                service = self.list_to_str(self.decode_uid_list(self.expand_group(entry['service'])))
+                action = self.list_to_str(self.decode_uid(entry['action']))
+                track = self.list_to_str(self.decode_uid(entry['track']))
+                install_on = self.list_to_str(self.decode_uid_list(self.expand_group(entry['install-on'])))
+                comments = entry['comments']
 
-                service = self.list_to_str(self.decode_uid_list(self.expand_group(self._tp_[i]['service'])))
-                ws.write(row, 6, service, self.style_picker(self._tp_[i]['enabled'], self._tp_[i]['service-negate']))
-
-                action = self.list_to_str(self.decode_uid(self._tp_[i]['action']))
-                ws.write(row, 7, action, self.style_picker(self._tp_[i]['enabled']))
-
-                track = self.list_to_str(self.decode_uid(self._tp_[i]['track']))
-                ws.write(row, 8, track, self.style_picker(self._tp_[i]['enabled']))
-
-                install_on = self.list_to_str(self.decode_uid_list(self.expand_group(self._tp_[i]['install-on'])))
-                ws.write(row, 9, install_on, self.style_picker(self._tp_[i]['enabled']))
-
-                ws.write(row, 10, self._tp_[i]['comments'], self.style_picker(self._tp_[i]['enabled']))
+                self.write(ws, row, 0, 0, 0, rule_number, self.style_picker(entry['enabled']))
+                self.write(ws, row, 0, 1, 0, name, self.style_picker(entry['enabled']))
+                self.write(ws, row, 0, 2, 0, p_scope, self.style_picker(entry['enabled'], entry['protected-scope-negate']))
+                self.write(ws, row, 0, 3, 0, source, self.style_picker(entry['enabled'], entry['source-negate']))
+                self.write(ws, row, 0, 4, 0, destination, self.style_picker(entry['enabled'], entry['destination-negate']))
+                self.write(ws, row, 0, 5, 0, p_site, self.style_picker(entry['enabled']))
+                self.write(ws, row, 0, 6, 0, service, self.style_picker(entry['enabled'], entry['service-negate']))
+                self.write(ws, row, 0, 7, 0, action, self.style_picker(entry['enabled']))
+                self.write(ws, row, 0, 8, 0, track, self.style_picker(entry['enabled']))
+                self.write(ws, row, 0, 9, 0, install_on, self.style_picker(entry['enabled']))
+                self.write(ws, row, 0, 10, 0, comments, self.style_picker(entry['enabled']))
+            row = row + 1
 
 
 def main(args):
