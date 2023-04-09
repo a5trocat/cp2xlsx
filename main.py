@@ -7,7 +7,7 @@ import json
 
 import xlsxwriter
 
-VERSION = '1.2a'
+VERSION = '1.3'
 
 class Cp2xlsx:
     def __init__(self, package: str) -> None:
@@ -16,21 +16,63 @@ class Cp2xlsx:
         self.package_name = self._index_['policyPackages'][0]['packageName']
         self.wb = xlsxwriter.Workbook(f'{self.package_name}.xlsx')
         self.init_styles()
+        self._cached_groups_ = dict()
+        self._cached_objects_ = dict()
+        self._cached_uids_ = dict()
         threads = []
+        if self._gnet_:
+            threads.append(Thread(
+                target=self.thread_wrapper,
+                args=(self.gen_firewall_sheet,
+                      ('Global Firewall', self._gnet_),
+                      "Global Firewall"
+                      )
+                )
+            )
         if self._net_:
-            threads.append(Thread(target=self.gen_firewall_sheet))
+            threads.append(Thread(
+                target=self.thread_wrapper,
+                args=(self.gen_firewall_sheet,
+                      ('Firewall', self._net_),
+                      "Firewall"
+                      )
+                )
+            )
         if self._nat_:
-            threads.append(Thread(target=self.gen_nat_sheet))
+            threads.append(Thread(
+                target=self.thread_wrapper,
+                args=(self.gen_nat_sheet,
+                      (),
+                      "NAT"
+                     )
+                )
+            )
         if self._tp_:
-            threads.append(Thread(target=self.gen_tp_sheet))
+            threads.append(Thread(
+                target=self.thread_wrapper,
+                args=(self.gen_tp_sheet,
+                      (),
+                      "TP"
+                      )
+                )
+            )
         for thread in threads:
             thread.start()
         for thread in threads:
             thread.join()
-        # self.gen_firewall_sheet()
+        # self.gen_firewall_sheet('Global Firewall', self._gnet_)
+        # self.gen_firewall_sheet('Firewall', self._net_)
         # self.gen_nat_sheet()
         # self.gen_tp_sheet()
         self.wb.close()
+
+    def thread_wrapper(self, target, args: tuple, name: str,):
+        start_time = time.perf_counter()
+        print(f"Thread {name} started.")
+        result = target(*args)
+        stop_time = time.perf_counter()
+        print(f"Therad {name} finished in {stop_time-start_time: 0.2f}s.")
+        return result
 
     def get_filename(self) -> str:
         return self.wb.filename
@@ -41,15 +83,19 @@ class Cp2xlsx:
             input("Нажмите Enter для выхода.")
             quit()
         if self._objects_ == None:
-            print("Файл objects.json не найден! Проверьте целостность архива.")
+            print("Файл *objects.json не найден! Проверьте целостность архива.")
             input("Нажмите Enter для выхода.")
             quit()
+        if self._gnet_ == None:
+            print("Файл '*Network-Global*.json' не найден. Пропускаем таблицу Global Firewall...")
         if self._net_ == None:
-            print("Файл 'Network-Management server.json' не найден. Пропускаем таблицу Firewall...")
+            print("Файл '*Network*.json' не найден. Пропускаем таблицу Firewall...")
         if self._nat_ == None:
-            print("Файл 'NAT-Management server.json' не найден. Пропускаем таблицу NAT...")
+            print("Файл '*NAT*.json' не найден. Пропускаем таблицу NAT...")
         if self._tp_ == None:
-            print("Файл 'Threat Prevention-Management server.json' не найден. Пропускаем таблицу Threat Prevention...")
+            print("Файл '*Threat Prevention*.json' не найден. Пропускаем таблицу Threat Prevention...")
+        if self._gwobj_ == None:
+            print("Файл '*gateway_objects.json' не найден.")
 
     def init_styles(self) -> None:
         default = {'valign': 'vcenter', 'border': True}
@@ -60,6 +106,9 @@ class Cp2xlsx:
         
         section = {**default, **{'bold': True, 'align': 'center', 'bg_color': 'yellow'}}
         self.style_section = self.wb.add_format(section)
+
+        placeholder = {**default, **{'bold': True, 'align': 'left', 'bg_color': 'green'}}
+        self.style_placeholder = self.wb.add_format(placeholder)
 
         data = {**default, **{'text_wrap': True, 'align': 'left', 'valign': 'top'}}
         self.style_data = self.wb.add_format(data)
@@ -112,32 +161,37 @@ class Cp2xlsx:
                         self._objects_ = json.loads(f.readline())
                     continue
 
-
     def find_obj_by_uid(self, uid: str) -> dict:
+        if uid in self._cached_uids_:
+            return self._cached_uids_[uid]
         for obj in self._objects_:
             if obj['uid'] == uid:
+                self._cached_uids_[uid] = obj
                 return obj
 
     def decode_uid(self, uid: str) -> str:
+        if uid in self._cached_objects_:
+            return self._cached_objects_[uid]
         obj = self.find_obj_by_uid(uid)
+        result = obj['name']
         if not obj:
-            return "!OBJECT NOT FOUND!"
-        
+            result = "!OBJECT NOT FOUND!"
         if 'host' in obj['type'] or 'gateway' in obj['type'] or 'cluster' in obj['type']:
-            return f"{obj['name']} / {obj['ipv4-address']}"
+            result = f"{obj['name']} / {obj['ipv4-address']}"
         if obj['type'] == 'network':
-            return f"{obj['name']} / {obj['subnet4']}/{obj['mask-length4']}"
+            result = f"{obj['name']} / {obj['subnet4']}/{obj['mask-length4']}"
         if obj['type'] == 'service-tcp':
-            return f"tcp/{obj['port']}"
+            result = f"tcp/{obj['port']}"
         if obj['type'] == 'service-udp':
-            return f"udp/{obj['port']}"
-        return obj['name']
+            result = f"udp/{obj['port']}"
+        self._cached_objects_[uid] = result
+        return  result
 
     def decode_uid_list(self, uids: list) -> list:
-        r = list()
-        for el in uids:
-            r.append(self.decode_uid(el))
-        return r
+        result = list()
+        for uid in uids:
+            result.append(self.decode_uid(uid))
+        return result
 
     def list_to_str(self, l: list) -> str:
         if type(l) is not list:
@@ -151,15 +205,20 @@ class Cp2xlsx:
         for uid in uids:
             if type(uid) is not str:
                 uid = uid['uid']
+            if uid in self._cached_groups_:
+                result = result + self._cached_groups_[uid]
+                continue
             obj = self.find_obj_by_uid(uid)
             if 'group' in obj['type']:
-                result = result + self.expand_group(obj['members'])
+                expanded = self.expand_group(obj['members'])
+                result = result + expanded
+                self._cached_groups_[uid] = expanded
             else:
                 result = result + [uid]
         return result
 
-    def gen_firewall_sheet(self) -> None:
-        ws = self.wb.add_worksheet('Firewall')
+    def gen_firewall_sheet(self, name: str, net_table: json) -> None:
+        ws = self.wb.add_worksheet(name)
         ws.set_column('A:A', 5)
         ws.set_column('B:B', 5)
         ws.set_column('C:C', 20)
@@ -181,49 +240,52 @@ class Cp2xlsx:
         ws.write('J1', 'Time', self.style_title)
         ws.write('K1', 'Comment', self.style_title)
 
-        for i in range(len(self._net_)):
+        for i in range(len(net_table)):
             row = i + 1
             style = self.style_data
-            if self._net_[i]['type'] == "access-section":
-                ws.merge_range(row, 0, row, 10, self._net_[i]['name'], self.style_section)
+            if net_table[i]['type'] == "place-holder":
+                ws.write(row, 0, net_table[i]['rule-number'], self.style_placeholder)
+                ws.merge_range(row, 1, row, 10, net_table[i]['name'], self.style_placeholder)
+            elif net_table[i]['type'] == "access-section":
+                ws.merge_range(row, 0, row, 10, net_table[i]['name'], self.style_section)
             else:
-                if not self._net_[i]['enabled']:
+                if not net_table[i]['enabled']:
                     style = self.style_data_dis
-                ws.write(row, 0, self._net_[i]['rule-number'], style)
+                ws.write(row, 0, net_table[i]['rule-number'], style)
                 try:
-                    hits = self._net_[i]['hits']['value']
+                    hits = net_table[i]['hits']['value']
                 except KeyError:
                     hits = ''
                 ws.write(row, 1, hits, style)
                 try:
-                    name = self._net_[i]['name']
+                    name = net_table[i]['name']
                 except KeyError:
                     name = ''
                 ws.write(row, 2, name, style)
-                source = self.list_to_str(self.decode_uid_list(self.expand_group(self._net_[i]['source'])))
-                if self._net_[i]['source-negate']:
+                source = self.list_to_str(self.decode_uid_list(self.expand_group(net_table[i]['source'])))
+                if net_table[i]['source-negate']:
                     ws.write(row, 3, source, self.style_data_neg)
                 else:
                     ws.write(row, 3, source, style)
-                destination = self.list_to_str(self.decode_uid_list(self.expand_group(self._net_[i]['destination'])))
-                if self._net_[i]['destination-negate']:
+                destination = self.list_to_str(self.decode_uid_list(self.expand_group(net_table[i]['destination'])))
+                if net_table[i]['destination-negate']:
                     ws.write(row, 4, destination, self.style_data_neg)
                 else:
                     ws.write(row, 4, destination, style)
-                vpn = self.list_to_str(self.decode_uid_list(self.expand_group(self._net_[i]['vpn'])))
+                vpn = self.list_to_str(self.decode_uid_list(self.expand_group(net_table[i]['vpn'])))
                 ws.write(row, 5, vpn, style)
-                service = self.list_to_str(self.decode_uid_list(self.expand_group(self._net_[i]['service'])))
-                if self._net_[i]['service-negate']:
+                service = self.list_to_str(self.decode_uid_list(self.expand_group(net_table[i]['service'])))
+                if net_table[i]['service-negate']:
                     ws.write(row, 6, service, self.style_data_neg)
                 else:
                     ws.write(row, 6, service, style)
-                action = self.list_to_str(self.decode_uid(self._net_[i]['action']))
+                action = self.list_to_str(self.decode_uid(net_table[i]['action']))
                 ws.write(row, 7, action, style)
-                track = self.list_to_str(self.decode_uid(self._net_[i]['track']['type']))
+                track = self.list_to_str(self.decode_uid(net_table[i]['track']['type']))
                 ws.write(row, 8, track, style)
-                time = self.list_to_str(self.decode_uid_list(self.expand_group(self._net_[i]['time'])))
+                time = self.list_to_str(self.decode_uid_list(self.expand_group(net_table[i]['time'])))
                 ws.write(row, 9, time, style)
-                ws.write(row, 10, self._net_[i]['comments'], style)
+                ws.write(row, 10, net_table[i]['comments'], style)
 
     def gen_nat_sheet(self) -> None:
         ws = self.wb.add_worksheet('NAT')
@@ -334,12 +396,12 @@ def main(args):
     if len(args) > 1:
         start_time = time.perf_counter()
         cp = Cp2xlsx(args[1])
-        end_time = time.perf_counter()
         file = cp.get_filename()
+        end_time = time.perf_counter()
         print(f'Файл {file} преобразован за {end_time - start_time: 0.2f} секунды.')
     else:
         # Cp2xlsx('show_package-2022-10-03_15-44-34.tar.gz')
-        Cp2xlsx('show_package-2023-03-13_09-55-13.tar.gz')
+        # Cp2xlsx('show_package-2023-03-13_09-55-13.tar.gz')
         # Cp2xlsx('show_package-2023-03-24_13-31-01.tar.gz')
         print("Использование: перетащите архив с выгрузкой из утилиты web_api_show_package.sh на этот файл.")
     input("Для выхода нажмите Enter")
