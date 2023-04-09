@@ -61,7 +61,7 @@ class Cp2xlsx:
         section = {**default, **{'bold': True, 'align': 'center', 'bg_color': 'yellow'}}
         self.style_section = self.wb.add_format(section)
 
-        data = {**default, **{'text_wrap': True, 'align': 'left'}}
+        data = {**default, **{'text_wrap': True, 'align': 'left', 'valign': 'top'}}
         self.style_data = self.wb.add_format(data)
 
         data_neg = {**data, **{'font_color': 'red', 'italic': True}}
@@ -81,42 +81,37 @@ class Cp2xlsx:
         self._gwobj_ = None
         self._objects_ = None
         self._tp_ = None
-        archive = tarfile.open(package, "r:gz")
-        for file in archive:
-            if fnmatch.fnmatch(file.name, 'index.json'):
-                f = archive.extractfile(file)
-                self._index_ = json.loads(f.readline())
-                f.close()
-                continue
-            if fnmatch.fnmatch(file.name, '*Network-Global*.json'):
-                print("Найдены глобальные правила.")
-                continue
-            if fnmatch.fnmatch(file.name, '*Network*.json'):
-                f = archive.extractfile(file)
-                self._net_ = json.loads(f.readline())
-                f.close()
-                continue
-            if fnmatch.fnmatch(file.name, '*NAT*.json'):
-                f = archive.extractfile(file)
-                self._nat_ = json.loads(f.readline())
-                f.close()
-                continue
-            if fnmatch.fnmatch(file.name, '*Threat Prevention*.json'):
-                f = archive.extractfile(file)
-                self._tp_ = json.loads(f.readline())
-                f.close()
-                continue
-            if fnmatch.fnmatch(file.name, '*gateway_objects.json'):
-                f = archive.extractfile(file)
-                self._gwobj_ = json.loads(f.readline())
-                f.close()
-                continue
-            if fnmatch.fnmatch(file.name, '*objects.json'):
-                f = archive.extractfile(file)
-                self._objects_ = json.loads(f.readline())
-                f.close()
-                continue
-        archive.close()
+        with tarfile.open(package, "r:gz") as archive:
+            for file in archive:
+                if fnmatch.fnmatch(file.name, 'index.json'):
+                    with archive.extractfile(file) as f:
+                        self._index_ = json.loads(f.readline())
+                    continue
+                if fnmatch.fnmatch(file.name, '*Network-Global*.json'):
+                    with archive.extractfile(file) as f:
+                        self._gnet_ = json.loads(f.readline())
+                    continue
+                if fnmatch.fnmatch(file.name, '*Network*.json'):
+                    with archive.extractfile(file) as f:
+                        self._net_ = json.loads(f.readline())
+                    continue
+                if fnmatch.fnmatch(file.name, '*NAT*.json'):
+                    with archive.extractfile(file) as f:
+                        self._nat_ = json.loads(f.readline())
+                    continue
+                if fnmatch.fnmatch(file.name, '*Threat Prevention*.json'):
+                    with archive.extractfile(file) as f:
+                        self._tp_ = json.loads(f.readline())
+                    continue
+                if fnmatch.fnmatch(file.name, '*gateway_objects.json'):
+                    with archive.extractfile(file) as f:
+                        self._gwobj_ = json.loads(f.readline())
+                    continue
+                if fnmatch.fnmatch(file.name, '*objects.json'):
+                    with archive.extractfile(file) as f:
+                        self._objects_ = json.loads(f.readline())
+                    continue
+
 
     def find_obj_by_uid(self, uid: str) -> dict:
         for obj in self._objects_:
@@ -207,19 +202,19 @@ class Cp2xlsx:
                 ws.write(row, 2, name, style)
                 source = self.list_to_str(self.decode_uid_list(self.expand_group(self._net_[i]['source'])))
                 if self._net_[i]['source-negate']:
-                    ws.write(row, 3, source, self.style_data_dis_neg)
+                    ws.write(row, 3, source, self.style_data_neg)
                 else:
                     ws.write(row, 3, source, style)
                 destination = self.list_to_str(self.decode_uid_list(self.expand_group(self._net_[i]['destination'])))
                 if self._net_[i]['destination-negate']:
-                    ws.write(row, 4, destination, self.style_data_dis_neg)
+                    ws.write(row, 4, destination, self.style_data_neg)
                 else:
                     ws.write(row, 4, destination, style)
                 vpn = self.list_to_str(self.decode_uid_list(self.expand_group(self._net_[i]['vpn'])))
                 ws.write(row, 5, vpn, style)
                 service = self.list_to_str(self.decode_uid_list(self.expand_group(self._net_[i]['service'])))
                 if self._net_[i]['service-negate']:
-                    ws.write(row, 6, service, self.style_data_dis_neg)
+                    ws.write(row, 6, service, self.style_data_neg)
                 else:
                     ws.write(row, 6, service, style)
                 action = self.list_to_str(self.decode_uid(self._net_[i]['action']))
@@ -307,25 +302,24 @@ class Cp2xlsx:
                 ws.write(row, 1, name, style)
                 p_scope = self.list_to_str(self.decode_uid_list(self.expand_group(self._tp_[i]['protected-scope'])))
                 if self._tp_[i]['protected-scope-negate']:
-                    ws.write(row, 2, p_scope, self.style_data_dis_neg)
+                    ws.write(row, 2, p_scope, self.style_data_neg)
                 else:
                     ws.write(row, 2, p_scope, style)
                 source = self.list_to_str(self.decode_uid_list(self.expand_group(self._tp_[i]['source'])))
                 if self._tp_[i]['source-negate']:
-                    ws.write(row, 3, source, self.style_data_dis_neg)
+                    ws.write(row, 3, source, self.style_data_neg)
                 else:
                     ws.write(row, 3, source, style)
                 destination = self.list_to_str(self.decode_uid_list(self.expand_group(self._tp_[i]['destination'])))
                 if self._tp_[i]['destination-negate']:
-                    ws.write(row, 4, destination, self.style_data_dis_neg)
+                    ws.write(row, 4, destination, self.style_data_neg)
                 else:
                     ws.write(row, 4, destination, style)
-                # p_site = self.list_to_str(self.decode_uid_list(self.expand_group(self._tp_[i]['protection-or-site'])))
                 p_site = 'N/A'
                 ws.write(row, 5, p_site, style)
                 service = self.list_to_str(self.decode_uid_list(self.expand_group(self._tp_[i]['service'])))
                 if self._tp_[i]['service-negate']:
-                    ws.write(row, 6, service, self.style_data_dis_neg)
+                    ws.write(row, 6, service, self.style_data_neg)
                 else:
                     ws.write(row, 6, service, style)
                 action = self.list_to_str(self.decode_uid(self._tp_[i]['action']))
@@ -343,10 +337,10 @@ def main(args):
         end_time = time.perf_counter()
         file = cp.get_filename()
         print(f'Файл {file} преобразован за {end_time - start_time: 0.2f} секунды.')
-        time.sleep(1)
     else:
         # Cp2xlsx('show_package-2022-10-03_15-44-34.tar.gz')
-        # Cp2xlsx('show_package-2023-03-13_09-55-13.tar.gz')
+        Cp2xlsx('show_package-2023-03-13_09-55-13.tar.gz')
+        # Cp2xlsx('show_package-2023-03-24_13-31-01.tar.gz')
         print("Использование: перетащите архив с выгрузкой из утилиты web_api_show_package.sh на этот файл.")
     input("Для выхода нажмите Enter")
 
