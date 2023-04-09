@@ -66,7 +66,17 @@ class Cp2xlsx:
         # self.gen_tp_sheet()
         self.wb.close()
 
-    def thread_wrapper(self, target, args: tuple, name: str,):
+    def thread_wrapper(self, target, args: tuple, name: str):
+        """Обертка для замера скорости выполнения функций
+
+        Args:
+            target (function): функция
+            args (tuple): аргументы
+            name (str): имя обертки
+
+        Returns:
+            any: результат выполнения target функции
+        """
         start_time = time.perf_counter()
         print(f"Thread {name} started.")
         result = target(*args)
@@ -75,9 +85,16 @@ class Cp2xlsx:
         return result
 
     def get_filename(self) -> str:
+        """Получаем имя файла xlsx
+
+        Returns:
+            str: имя файла
+        """
         return self.wb.filename
 
     def verify_package(self) -> None:
+        """Проверка на наличие требуемых файлов в архиве политики
+        """
         if self._index_ == None:
             print("Файл index.json не найден! Проверьте целостность архива.")
             input("Нажмите Enter для выхода.")
@@ -98,6 +115,8 @@ class Cp2xlsx:
             print("Файл '*gateway_objects.json' не найден.")
 
     def init_styles(self) -> None:
+        """Инициализация стилей таблицы
+        """
         default = {'valign': 'vcenter', 'border': True}
         self.style_default = self.wb.add_format(default)
 
@@ -123,6 +142,11 @@ class Cp2xlsx:
         self.style_data_dis_neg = self.wb.add_format(data_dis_neg)
 
     def load_package(self, package: str) -> None:
+        """Загрузка файлов json из архива политики
+
+        Args:
+            package (str): путь до архива
+        """
         self._index_ = None
         self._net_ = None
         self._gnet_ = None
@@ -162,6 +186,14 @@ class Cp2xlsx:
                     continue
 
     def find_obj_by_uid(self, uid: str) -> dict:
+        """Поиск объекта по его uid. Используется кэширование.
+
+        Args:
+            uid (str): uid объекта
+
+        Returns:
+            dict: объект
+        """
         if uid in self._cached_uids_:
             return self._cached_uids_[uid]
         for obj in self._objects_:
@@ -170,6 +202,14 @@ class Cp2xlsx:
                 return obj
 
     def decode_uid(self, uid: str) -> str:
+        """Расшифровка объекта. Используется кэширование.
+
+        Args:
+            uid (str): uid объекта
+
+        Returns:
+            str: описание объекта
+        """
         if uid in self._cached_objects_:
             return self._cached_objects_[uid]
         obj = self.find_obj_by_uid(uid)
@@ -188,17 +228,41 @@ class Cp2xlsx:
         return  result
 
     def decode_uid_list(self, uids: list) -> list:
+        """Расшифровка массива объектов
+
+        Args:
+            uids (list): массив uid объектов
+
+        Returns:
+            list: массив описаний объектов
+        """
         result = list()
         for uid in uids:
             result.append(self.decode_uid(uid))
         return result
 
     def list_to_str(self, l: list) -> str:
+        """Преобразование массива в строку
+
+        Args:
+            l (list): массив объектов
+
+        Returns:
+            str: строка объектов
+        """
         if type(l) is not list:
             return l
         return '\n'.join(l)
 
     def expand_group(self, uids: list) -> list:
+        """Раскрытие группы объектов. Используется кэширование.
+
+        Args:
+            uids (list): массив uid объектов
+
+        Returns:
+            list: список объектов в группе
+        """
         if type(uids) is str:
             uids = [uids]
         result = list()
@@ -218,6 +282,12 @@ class Cp2xlsx:
         return result
 
     def gen_firewall_sheet(self, name: str, net_table: json) -> None:
+        """Генерация страницы с правилами файрволла
+
+        Args:
+            name (str): Имя страницы
+            net_table (json): объект с правилами файрволла
+        """
         ws = self.wb.add_worksheet(name)
         ws.set_column('A:A', 5)
         ws.set_column('B:B', 5)
@@ -288,6 +358,8 @@ class Cp2xlsx:
                 ws.write(row, 10, net_table[i]['comments'], style)
 
     def gen_nat_sheet(self) -> None:
+        """Генерация странцы NAT
+        """
         ws = self.wb.add_worksheet('NAT')
         ws.set_column('A:A', 5)
         ws.set_column('B:C', 50)
@@ -329,6 +401,8 @@ class Cp2xlsx:
                 ws.write(row, 7, self._nat_[i]['comments'], style)
 
     def gen_tp_sheet(self) -> None:
+        """Генерация страницы Threat prevention
+        """
         ws = self.wb.add_worksheet('Threat Prevention')
         ws.set_column('A:A', 5)
         ws.set_column('B:C', 20)
