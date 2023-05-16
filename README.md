@@ -9,7 +9,7 @@ Supported policies:
 
 ## Usage
 
-```bash
+```
 cp2xlsx [-h] [-st] [-eg | -neg] [-sm | -nsm] file
 ```
 
