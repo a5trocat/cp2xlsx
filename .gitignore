@@ -1,5 +1,7 @@
 # Created by https://www.toptal.com/developers/gitignore/api/python,virtualenv,git
 # Edit at https://www.toptal.com/developers/gitignore?templates=python,virtualenv,git
+### Test packages ###
+test_packages/
 
 ### Git ###
 # Created by git for backups. To disable backups in Git:
@@ -44,6 +46,7 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+build.bat
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
