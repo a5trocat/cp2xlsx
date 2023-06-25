@@ -5,9 +5,10 @@ from threading import Thread
 import tarfile
 import json
 
+import argparse
 import xlsxwriter
 
-VERSION = '1.4'
+VERSION = '1.5'
 
 class Cp2xlsx:
     def __init__(self, package: str, st: bool, eg: bool, sm: bool) -> None:
@@ -19,9 +20,9 @@ class Cp2xlsx:
         self.package_name = self._index_['policyPackages'][0]['packageName']
         self.wb = xlsxwriter.Workbook(f'{self.package_name}.xlsx')
         self.init_styles()
-        self._cached_groups_ = dict()
-        self._cached_objects_ = dict()
-        self._cached_uids_ = dict()
+        self._cached_groups_ = {}
+        self._cached_objects_ = {}
+        self._cached_uids_ = {}
         self.run()
         self.wb.close()
 
@@ -40,13 +41,13 @@ class Cp2xlsx:
         else:
             threads = []
             if self._gnet_ and self.eg:
-                threads.append(Thread(target=self.gen_firewall_sheet, args=(g_fw_args)))
+                threads.append(Thread(target=self.gen_firewall_sheet, args=g_fw_args))
             if self._net_:
-                threads.append(Thread(target=self.gen_firewall_sheet, args=(l_fw_args)))
+                threads.append(Thread(target=self.gen_firewall_sheet, args=l_fw_args))
             if self._nat_:
-                threads.append(Thread(target=self.gen_nat_sheet, args=(nat_args)))
+                threads.append(Thread(target=self.gen_nat_sheet, args=nat_args))
             if self._tp_:
-                threads.append(Thread(target=self.gen_tp_sheet, args=(tp_args)))
+                threads.append(Thread(target=self.gen_tp_sheet, args=tp_args))
 
             for thread in threads:
                 thread.start()
@@ -65,23 +66,23 @@ class Cp2xlsx:
     def verify_package(self) -> None:
         """ Check if all files from archive were loaded
         """
-        if self._index_ == None:
+        if self._index_ is None:
             print("File index.json is not found! Check archive integrity.")
             input("Press Enter to exit.")
-            quit()
-        if self._objects_ == None:
+            sys.exit()
+        if self._objects_ is None:
             print("File *objects.json is not found! Check archive integrity.")
             input("Press Enter to exit.")
-            quit()
-        if self._gnet_ == None:
+            sys.exit()
+        if self._gnet_ is None:
             print("File '*Network-Global*.json' is not found. Skipping Global Firewall table...")
-        if self._net_ == None:
+        if self._net_ is None:
             print("File '*Network*.json' is not found. Skipping Firewall table...")
-        if self._nat_ == None:
+        if self._nat_ is None:
             print("File '*NAT*.json' is not found. Skipping NAT table...")
-        if self._tp_ == None:
+        if self._tp_ is None:
             print("File '*Threat Prevention*.json' is not found. Skipping Threat Prevention table...")
-        if self._gwobj_ == None:
+        if self._gwobj_ is None:
             print("File '*gateway_objects.json' is not found.")
 
     def init_styles(self) -> None:
@@ -92,7 +93,7 @@ class Cp2xlsx:
 
         title = {**default, **{'font_size': '12', 'bold': True, 'bottom': True, 'align': 'center', 'font_color': 'white', 'bg_color': 'gray'}}
         self.style_title = self.wb.add_format(title)
-        
+
         section = {**default, **{'bold': True, 'align': 'center', 'bg_color': 'yellow'}}
         self.style_section = self.wb.add_format(section)
 
@@ -111,24 +112,46 @@ class Cp2xlsx:
         data_dis_neg = {**data_neg, **data_dis}
         self.style_data_dis_neg = self.wb.add_format(data_dis_neg)
 
-    def style_picker(self, enabled: bool = True, negated: bool = False) -> xlsxwriter.workbook.Format:
-        """ Choose cells style
+        data_temp = {**data, **{'bg_color': '#ffe994'}}
+        self.style_data_temp = self.wb.add_format(data_temp)
+
+        data_temp_neg = {**data_neg, **data_temp}
+        self.style_data_temp_neg = self.wb.add_format(data_temp_neg)
+
+    def get_style(self, enabled: bool=True, temp: bool=False, src_neg: bool=False, dst_neg: bool=False, serv_neg: bool=False, ps_neg: bool=False) -> dict:
+        """Get style for each cell in row
 
         Args:
-            enabled (bool, optional): is rule enabled? Defaults to True.
-            negated (bool, optional): is rule negated? Defaults to False.
+            enabled (bool, optional): Is rule enabled?. Defaults to True.
+            temp (bool, optional): Is rule temp?. Defaults to False.
+            src_neg (bool, optional): Is source negated?. Defaults to False.
+            dst_neg (bool, optional): Is destination negated?. Defaults to False.
+            serv_neg (bool, optional): Is service negated?. Defaults to False.
+            ps_neg (bool, optional): Is protection scope negated?. Defaults to False.
 
         Returns:
-            xlsxwriter.workbook.Format: style
+            dict: Dict of styles for cells
         """
-        if enabled and not negated:
-            return self.style_data
-        if enabled and negated:
-            return self.style_data_neg
-        if not enabled and not negated:
-            return self.style_data_dis
-        if not enabled and negated:
-            return self.style_data_dis_neg
+        if enabled:
+            if temp:
+                default = self.style_data_temp
+                src = self.style_data_temp_neg if src_neg else default
+                dst = self.style_data_temp_neg if dst_neg else default
+                serv = self.style_data_temp_neg if serv_neg else default
+                ps = self.style_data_temp_neg if ps_neg else default
+            else:
+                default = self.style_data
+                src = self.style_data_neg if src_neg else default
+                dst = self.style_data_neg if dst_neg else default
+                serv = self.style_data_neg if serv_neg else default
+                ps = self.style_data_neg if ps_neg else default
+        else: # if rule is disabled
+            default = self.style_data_dis
+            src = self.style_data_dis_neg if src_neg else default
+            dst = self.style_data_dis_neg if dst_neg else default
+            serv = self.style_data_dis_neg if serv_neg else default
+            ps = self.style_data_dis_neg if ps_neg else default
+        return {"default": default, "source": src, "destination": dst, "service": serv, "protection-scope": ps}
 
     def load_package(self, package: str) -> None:
         """ Open policy package archive and load JSONs into memory
@@ -167,7 +190,7 @@ class Cp2xlsx:
                     with archive.extractfile(file) as f:
                         self._objects_ = json.loads(f.readline())
 
-    def find_obj_by_uid(self, uid: str) -> dict:
+    def find_obj_by_uid(self, uid: str) -> dict | None:
         """ Find object by uid
 
         Args:
@@ -182,6 +205,7 @@ class Cp2xlsx:
             if obj['uid'] == uid:
                 self._cached_uids_[uid] = obj
                 return obj
+        return None
 
     def object_to_str(self, uid: str) -> str:
         """ Represent object with a string
@@ -195,19 +219,28 @@ class Cp2xlsx:
         if uid in self._cached_objects_:
             return self._cached_objects_[uid]
         obj = self.find_obj_by_uid(uid)
-        result = obj['name']
         if not obj:
             result = "!OBJECT NOT FOUND!"
-        if 'host' in obj['type'] or 'gateway' in obj['type'] or 'cluster' in obj['type']:
+            self._cached_objects_[uid] = result
+            return result
+
+        if obj['type'] in ['host', 'simple-gateway', 'simple-cluster']:
             result = f"{obj['name']} / {obj['ipv4-address']}"
-        if obj['type'] == 'network':
+        elif obj['type'] == 'network':
             result = f"{obj['name']} / {obj['subnet4']}/{obj['mask-length4']}"
-        if obj['type'] == 'service-tcp':
+        elif obj['type'] == 'service-tcp':
             result = f"tcp/{obj['port']}"
-        if obj['type'] == 'service-udp':
+        elif obj['type'] == 'service-udp':
             result = f"udp/{obj['port']}"
+        elif obj['type'] == 'CpmiAnyObject':
+            result = "Any"
+        elif obj['type'] == 'time':
+            result = f"{obj['end']['iso-8601'][:-3].replace('T', ' ')}"
+        else:
+            result = obj['name']
+
         self._cached_objects_[uid] = result
-        return  result
+        return result
 
     def objects_to_str(self, uids: list | str) -> list:
         """ Represent objects in list with a string
@@ -218,9 +251,9 @@ class Cp2xlsx:
         Returns:
             list: list of objects representations
         """
-        if type(uids) is str:
+        if isinstance(uids, str):
             uids = [uids]
-        result = list()
+        result = []
         for uid in uids:
             result.append(self.object_to_str(uid))
         return result
@@ -234,7 +267,7 @@ class Cp2xlsx:
         Returns:
             str
         """
-        if type(l) is not list:
+        if not isinstance(l, list):
             return l
         return '\n'.join(l)
 
@@ -247,11 +280,11 @@ class Cp2xlsx:
         Returns:
             list: list of uids of group members
         """
-        if type(uids) is str:
+        if isinstance(uids, str):
             uids = [uids]
-        result = list()
+        result = []
         for uid in uids:
-            if type(uid) is not str:
+            if not isinstance(uid, str):
                 uid = uid['uid']
             if uid in self._cached_groups_:
                 result = result + self._cached_groups_[uid]
@@ -265,7 +298,7 @@ class Cp2xlsx:
                 result = result + [uid]
         # return result without duplicates
         return list(dict.fromkeys(result))
-    
+
     def write(self, ws: xlsxwriter.workbook.Worksheet, row: int, extra_row: int, col: int, extra_col: int, data: str, format: xlsxwriter.workbook.Format):
         """ Single function for xlsxwriter merge_range write.
 
@@ -300,6 +333,14 @@ class Cp2xlsx:
         result.append(string)
         return result
 
+    def format_hits(self, num: int) -> str:
+        ds = [(1e15, 'Q'), (1e12, 'T'), (1e9, 'B'), (1e6, 'M'), (1e3, 'K')]
+        for d in ds:
+            head = num / d[0]
+            if head > 1:
+                return f"{head:.0f}{d[1]}"
+        return str(num)
+
     def gen_firewall_sheet(self, name: str, net_table: json) -> None:
         """Firewall page generation
 
@@ -310,13 +351,13 @@ class Cp2xlsx:
 
         ws = self.wb.add_worksheet(name)
         ws.set_column('A:A', 5)
-        ws.set_column('B:B', 10)
+        ws.set_column('B:B', 7)
         ws.set_column('C:C', 20)
         ws.set_column('D:E', 40)
         ws.set_column('F:F', 15)
         ws.set_column('G:G', 20)
         ws.set_column('H:I', 10)
-        ws.set_column('J:J', 15)
+        ws.set_column('J:J', 20)
         ws.set_column('K:K', 40)
         ws.set_column('L:L', 40)
 
@@ -343,14 +384,11 @@ class Cp2xlsx:
                 self.write(ws, row, 0, 0, 11, entry['name'], self.style_section)
             else:
                 rule_number = str(entry['rule-number'])
-                try:
-                    hits = str(entry['hits']['value'])
-                except KeyError:
-                    hits = ''
-                try:
-                    name = entry['name']
-                except KeyError:
-                    name = ''
+                hits = entry.get('hits')
+                if hits:
+                    hits = self.format_hits(hits['value'])
+
+                name = entry.get('name', '')
                 source = self.split_string(self.list_to_str(self.objects_to_str(self.expand_group(entry['source']))))
                 s_trunkated_len = len(source)
                 destination = self.split_string(self.list_to_str(self.objects_to_str(self.expand_group(entry['destination']))))
@@ -363,31 +401,39 @@ class Cp2xlsx:
                 time = self.list_to_str(self.objects_to_str(self.expand_group(entry['time'])))
                 install_on = self.list_to_str(self.objects_to_str(self.expand_group(entry['install-on'])))
                 comments = entry['comments']
-                
-                self.write(ws, row, extra_rows, 0, 0, rule_number, self.style_picker(entry['enabled']))
-                self.write(ws, row, extra_rows, 1, 0, hits, self.style_picker(entry['enabled']))
-                self.write(ws, row, extra_rows, 2, 0, name, self.style_picker(entry['enabled']))
+
+                style = self.get_style(
+                    enabled=entry['enabled'],
+                    temp=True if time != "Any" else False,
+                    src_neg=entry['source-negate'],
+                    dst_neg=entry['destination-negate'],
+                    serv_neg=entry['service-negate']
+                    )
+
+                self.write(ws, row, extra_rows, 0, 0, rule_number, style['default'])
+                self.write(ws, row, extra_rows, 1, 0, hits, style['default'])
+                self.write(ws, row, extra_rows, 2, 0, name, style['default'])
                 row_for_data = extra_rows // s_trunkated_len
                 s_rows_remain = extra_rows
                 for i in range(s_trunkated_len):
                     if s_rows_remain < row_for_data:
                         row_for_data = s_rows_remain
-                    self.write(ws, row+i, row_for_data, 3, 0, source[i], self.style_picker(entry['enabled'], entry['source-negate']))
+                    self.write(ws, row+i, row_for_data, 3, 0, source[i], style['source'])
                     s_rows_remain = s_rows_remain - row_for_data
                 row_for_data = extra_rows // d_trunkated_len
                 d_rows_remain = extra_rows
                 for i in range(d_trunkated_len):
                     if d_rows_remain < row_for_data:
                         row_for_data = d_rows_remain
-                    self.write(ws, row+i, row_for_data, 4, 0, destination[i], self.style_picker(entry['enabled'], entry['destination-negate']))
+                    self.write(ws, row+i, row_for_data, 4, 0, destination[i], style['destination'])
                     d_rows_remain = d_rows_remain - row_for_data
-                self.write(ws, row, extra_rows, 5, 0, vpn, self.style_picker(entry['enabled']))
-                self.write(ws, row, extra_rows, 6, 0, service, self.style_picker(entry['enabled'], entry['service-negate']))
-                self.write(ws, row, extra_rows, 7, 0, action, self.style_picker(entry['enabled']))
-                self.write(ws, row, extra_rows, 8, 0, track, self.style_picker(entry['enabled']))
-                self.write(ws, row, extra_rows, 9, 0, time, self.style_picker(entry['enabled']))
-                self.write(ws, row, extra_rows, 10, 0, install_on, self.style_picker(entry['enabled']))
-                self.write(ws, row, extra_rows, 11, 0, comments, self.style_picker(entry['enabled']))
+                self.write(ws, row, extra_rows, 5, 0, vpn, style['default'])
+                self.write(ws, row, extra_rows, 6, 0, service, style['service'])
+                self.write(ws, row, extra_rows, 7, 0, action, style['default'])
+                self.write(ws, row, extra_rows, 8, 0, track, style['default'])
+                self.write(ws, row, extra_rows, 9, 0, time, style['default'])
+                self.write(ws, row, extra_rows, 10, 0, install_on, style['default'])
+                self.write(ws, row, extra_rows, 11, 0, comments, style['default'])
                 row = row + extra_rows
             row = row + 1
 
@@ -428,16 +474,17 @@ class Cp2xlsx:
                 t_service = self.list_to_str(self.objects_to_str(self.expand_group(entry['translated-service'])))
                 install_on = self.list_to_str(self.objects_to_str(self.expand_group(entry['install-on'])))
                 comments = entry['comments']
-                
-                self.write(ws, row, 0, 0, 0, rule_number, self.style_picker(entry['enabled']))
-                self.write(ws, row, 0, 1, 0, o_source, self.style_picker(entry['enabled']))
-                self.write(ws, row, 0, 2, 0, o_destination, self.style_picker(entry['enabled']))
-                self.write(ws, row, 0, 3, 0, o_service, self.style_picker(entry['enabled']))
-                self.write(ws, row, 0, 4, 0, t_source, self.style_picker(entry['enabled']))
-                self.write(ws, row, 0, 5, 0, t_destination, self.style_picker(entry['enabled']))
-                self.write(ws, row, 0, 6, 0, t_service, self.style_picker(entry['enabled']))
-                self.write(ws, row, 0, 7, 0, install_on, self.style_picker(entry['enabled']))
-                self.write(ws, row, 0, 8, 0, comments, self.style_picker(entry['enabled']))
+                style = self.get_style(enabled=entry['enabled'])
+
+                self.write(ws, row, 0, 0, 0, rule_number, style['default'])
+                self.write(ws, row, 0, 1, 0, o_source, style['default'])
+                self.write(ws, row, 0, 2, 0, o_destination, style['default'])
+                self.write(ws, row, 0, 3, 0, o_service, style['default'])
+                self.write(ws, row, 0, 4, 0, t_source, style['default'])
+                self.write(ws, row, 0, 5, 0, t_destination, style['default'])
+                self.write(ws, row, 0, 6, 0, t_service, style['default'])
+                self.write(ws, row, 0, 7, 0, install_on, style['default'])
+                self.write(ws, row, 0, 8, 0, comments, style['default'])
             row = row + 1
 
     def gen_tp_sheet(self, name: str, tp_table: json) -> None:
@@ -471,10 +518,7 @@ class Cp2xlsx:
                 self.write(ws, row, 0, 0, 10, entry['name'], self.style_section)
             else:
                 rule_number = str(entry['rule-number'])
-                try:
-                    name = entry['name']
-                except KeyError:
-                    name = ''
+                name = entry.get('name', '')
                 p_scope = self.list_to_str(self.objects_to_str(self.expand_group(entry['protected-scope'])))
                 source = self.list_to_str(self.objects_to_str(self.expand_group(entry['source'])))
                 destination = self.list_to_str(self.objects_to_str(self.expand_group(entry['destination'])))
@@ -484,32 +528,38 @@ class Cp2xlsx:
                 track = self.list_to_str(self.objects_to_str(entry['track']))
                 install_on = self.list_to_str(self.objects_to_str(self.expand_group(entry['install-on'])))
                 comments = entry['comments']
+                style = self.get_style(
+                    enabled=entry['enabled'],
+                    src_neg=entry['source-negate'],
+                    dst_neg=entry['destination-negate'],
+                    serv_neg=entry['service-negate'],
+                    ps_neg=entry['protected-scope-negate']
+                    )
 
-                self.write(ws, row, 0, 0, 0, rule_number, self.style_picker(entry['enabled']))
-                self.write(ws, row, 0, 1, 0, name, self.style_picker(entry['enabled']))
-                self.write(ws, row, 0, 2, 0, p_scope, self.style_picker(entry['enabled'], entry['protected-scope-negate']))
-                self.write(ws, row, 0, 3, 0, source, self.style_picker(entry['enabled'], entry['source-negate']))
-                self.write(ws, row, 0, 4, 0, destination, self.style_picker(entry['enabled'], entry['destination-negate']))
-                self.write(ws, row, 0, 5, 0, p_site, self.style_picker(entry['enabled']))
-                self.write(ws, row, 0, 6, 0, service, self.style_picker(entry['enabled'], entry['service-negate']))
-                self.write(ws, row, 0, 7, 0, action, self.style_picker(entry['enabled']))
-                self.write(ws, row, 0, 8, 0, track, self.style_picker(entry['enabled']))
-                self.write(ws, row, 0, 9, 0, install_on, self.style_picker(entry['enabled']))
-                self.write(ws, row, 0, 10, 0, comments, self.style_picker(entry['enabled']))
+                self.write(ws, row, 0, 0, 0, rule_number, style['default'])
+                self.write(ws, row, 0, 1, 0, name, style['default'])
+                self.write(ws, row, 0, 2, 0, p_scope, style['protection-scope'])
+                self.write(ws, row, 0, 3, 0, source, style['source'])
+                self.write(ws, row, 0, 4, 0, destination, style['destination'])
+                self.write(ws, row, 0, 5, 0, p_site, style['default'])
+                self.write(ws, row, 0, 6, 0, service, style['service'])
+                self.write(ws, row, 0, 7, 0, action, style['default'])
+                self.write(ws, row, 0, 8, 0, track, style['default'])
+                self.write(ws, row, 0, 9, 0, install_on, style['default'])
+                self.write(ws, row, 0, 10, 0, comments, style['default'])
             row = row + 1
 
 
 def main(args):
-    import argparse
-    
+
+
     def check_user_input(user_input: str) -> bool:
         user_input = user_input.lower()
         if user_input == "y":
             return True
-        elif user_input == "n":
+        if user_input == "n":
             return False
-        else:
-            return None
+        return None
 
     print(f"cp2xlsx80 ver. {VERSION}")
     print("https://github.com/a5trocat/cp2xlsx")
@@ -527,7 +577,7 @@ def main(args):
 
     if args.export_global == args.no_export_global:
         eg = None
-        while eg == None:
+        while eg is None:
             eg = input("Would you like to export Global Firewall policy? [Y/n]: ")
             if eg == "":
                 eg = True
@@ -538,7 +588,7 @@ def main(args):
 
     if args.show_members == args.no_show_members:
         sm = None
-        while sm == None:
+        while sm is None:
             sm = input("Whould you like to show group members? [Y/n]: ")
             if sm == "":
                 sm = True
