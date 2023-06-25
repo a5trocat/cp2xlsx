@@ -134,7 +134,7 @@ class Cp2xlsx:
         """ Open policy package archive and load JSONs into memory
 
         Args:
-            package (str): путь до архива
+            package (str): archive path
         """
         self._index_ = None
         self._net_ = None
@@ -148,31 +148,24 @@ class Cp2xlsx:
                 if fnmatch.fnmatch(file.name, 'index.json'):
                     with archive.extractfile(file) as f:
                         self._index_ = json.loads(f.readline())
-                    continue
-                if fnmatch.fnmatch(file.name, '*Network-Global*.json'):
+                elif fnmatch.fnmatch(file.name, '*Network-Global*.json'):
                     with archive.extractfile(file) as f:
                         self._gnet_ = json.loads(f.readline())
-                    continue
-                if fnmatch.fnmatch(file.name, '*Network*.json'):
+                elif fnmatch.fnmatch(file.name, '*Network*.json'):
                     with archive.extractfile(file) as f:
                         self._net_ = json.loads(f.readline())
-                    continue
-                if fnmatch.fnmatch(file.name, '*NAT*.json'):
+                elif fnmatch.fnmatch(file.name, '*NAT*.json'):
                     with archive.extractfile(file) as f:
                         self._nat_ = json.loads(f.readline())
-                    continue
-                if fnmatch.fnmatch(file.name, '*Threat Prevention*.json'):
+                elif fnmatch.fnmatch(file.name, '*Threat Prevention*.json'):
                     with archive.extractfile(file) as f:
                         self._tp_ = json.loads(f.readline())
-                    continue
-                if fnmatch.fnmatch(file.name, '*gateway_objects.json'):
+                elif fnmatch.fnmatch(file.name, '*gateway_objects.json'):
                     with archive.extractfile(file) as f:
                         self._gwobj_ = json.loads(f.readline())
-                    continue
-                if fnmatch.fnmatch(file.name, '*objects.json'):
+                elif fnmatch.fnmatch(file.name, '*objects.json'):
                     with archive.extractfile(file) as f:
                         self._objects_ = json.loads(f.readline())
-                    continue
 
     def find_obj_by_uid(self, uid: str) -> dict:
         """ Find object by uid
