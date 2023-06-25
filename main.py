@@ -26,72 +26,33 @@ class Cp2xlsx:
         self.wb.close()
 
     def run(self):
+        g_fw_args   = ('Global FW', self._gnet_)
+        l_fw_args   = ('Local FW', self._net_)
+        nat_args    = ('NAT', self._nat_)
+        tp_args     = ('TP', self._tp_)
+
         if self.st:
             if self.eg:
-                self.gen_firewall_sheet('Global Firewall', self._gnet_)
-            self.gen_firewall_sheet('Firewall', self._net_)
-            self.gen_nat_sheet()
-            self.gen_tp_sheet()
+                self.gen_firewall_sheet(*g_fw_args)
+            self.gen_firewall_sheet(*l_fw_args)
+            self.gen_nat_sheet(*nat_args)
+            self.gen_tp_sheet(*tp_args)
         else:
             threads = []
             if self._gnet_ and self.eg:
-                threads.append(Thread(
-                    target=self.thread_wrapper,
-                    args=(self.gen_firewall_sheet,
-                        ('Global Firewall', self._gnet_),
-                        "Global Firewall"
-                        )
-                    )
-                )
+                threads.append(Thread(target=self.gen_firewall_sheet, args=(g_fw_args)))
             if self._net_:
-                threads.append(Thread(
-                    target=self.thread_wrapper,
-                    args=(self.gen_firewall_sheet,
-                        ('Firewall', self._net_),
-                        "Firewall"
-                        )
-                    )
-                )
+                threads.append(Thread(target=self.gen_firewall_sheet, args=(l_fw_args)))
             if self._nat_:
-                threads.append(Thread(
-                    target=self.thread_wrapper,
-                    args=(self.gen_nat_sheet,
-                        (),
-                        "NAT"
-                        )
-                    )
-                )
+                threads.append(Thread(target=self.gen_nat_sheet, args=(nat_args)))
             if self._tp_:
-                threads.append(Thread(
-                    target=self.thread_wrapper,
-                    args=(self.gen_tp_sheet,
-                        (),
-                        "TP"
-                        )
-                    )
-                )
+                threads.append(Thread(target=self.gen_tp_sheet, args=(tp_args)))
+
             for thread in threads:
                 thread.start()
             for thread in threads:
                 thread.join()
 
-    def thread_wrapper(self, target, args: tuple, name: str):
-        """ Thread wrapper for calculating execution time
-
-        Args:
-            target (function): target function
-            args (tuple): target args
-            name (str): name of thread
-
-        Returns:
-            any: return of target function
-        """
-        start_time = time.perf_counter()
-        print(f"Thread {name} started.")
-        result = target(*args)
-        stop_time = time.perf_counter()
-        print(f"Thread {name} finished in {stop_time-start_time: 0.2f}s.")
-        return result
 
     def get_filename(self) -> str:
         """ Get xlsx file name
@@ -437,10 +398,10 @@ class Cp2xlsx:
                 row = row + extra_rows
             row = row + 1
 
-    def gen_nat_sheet(self) -> None:
+    def gen_nat_sheet(self, name: str, nat_table: json) -> None:
         """ NAT page generation
         """
-        ws = self.wb.add_worksheet('NAT')
+        ws = self.wb.add_worksheet(name)
         ws.set_column('A:A', 5)
         ws.set_column('B:C', 50)
         ws.set_column('D:D', 20)
@@ -461,7 +422,7 @@ class Cp2xlsx:
         ws.freeze_panes(1, 0)
 
         row = 1
-        for entry in self._nat_:
+        for entry in nat_table:
             if entry['type'] == "nat-section":
                 self.write(ws, row, 0, 0, 8, entry['name'], self.style_section)
             else:
@@ -486,10 +447,10 @@ class Cp2xlsx:
                 self.write(ws, row, 0, 8, 0, comments, self.style_picker(entry['enabled']))
             row = row + 1
 
-    def gen_tp_sheet(self) -> None:
+    def gen_tp_sheet(self, name: str, tp_table: json) -> None:
         """ Threat prevention page generation
         """
-        ws = self.wb.add_worksheet('Threat Prevention')
+        ws = self.wb.add_worksheet(name)
         ws.set_column('A:A', 5)
         ws.set_column('B:C', 20)
         ws.set_column('D:E', 50)
@@ -512,7 +473,7 @@ class Cp2xlsx:
         ws.freeze_panes(1, 0)
 
         row = 1
-        for entry in self._tp_:
+        for entry in tp_table:
             if entry['type'] == "threat-section":
                 self.write(ws, row, 0, 0, 10, entry['name'], self.style_section)
             else:
