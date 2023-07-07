@@ -8,7 +8,7 @@ import json
 import argparse
 import xlsxwriter
 
-VERSION = '1.5'
+VERSION = '1.6'
 
 class Cp2xlsx:
     def __init__(self, package: str, st: bool, eg: bool, sm: bool) -> None:
@@ -258,7 +258,8 @@ class Cp2xlsx:
             result.append(self.object_to_str(uid))
         return result
 
-    def list_to_str(self, l: list) -> str:
+    @staticmethod
+    def list_to_str(l: list) -> str:
         """ Convert list to string with new line
 
         Args:
@@ -299,7 +300,8 @@ class Cp2xlsx:
         # return result without duplicates
         return list(dict.fromkeys(result))
 
-    def write(self, ws: xlsxwriter.workbook.Worksheet, row: int, extra_row: int, col: int, extra_col: int, data: str, format: xlsxwriter.workbook.Format):
+    @staticmethod
+    def write(ws: xlsxwriter.workbook.Worksheet, row: int, extra_row: int, col: int, extra_col: int, data: str, format: xlsxwriter.workbook.Format):
         """ Single function for xlsxwriter merge_range write.
 
         Args:
@@ -316,7 +318,8 @@ class Cp2xlsx:
         else:
             ws.write(row, col, data, format)
 
-    def split_string(self, string: str) -> list:
+    @staticmethod
+    def split_string(string: str) -> list:
         """ Split string with len() > 32767 to comply with xlsx cell's max len
 
         Args:
@@ -333,7 +336,8 @@ class Cp2xlsx:
         result.append(string)
         return result
 
-    def format_hits(self, num: int) -> str:
+    @staticmethod
+    def format_hits(num: int) -> str:
         ds = [(1e15, 'Q'), (1e12, 'T'), (1e9, 'B'), (1e6, 'M'), (1e3, 'K')]
         for d in ds:
             head = num / d[0]
@@ -350,6 +354,8 @@ class Cp2xlsx:
         """
 
         ws = self.wb.add_worksheet(name)
+        ws.outline_settings(True, False)
+
         ws.set_column('A:A', 5)
         ws.set_column('B:B', 7)
         ws.set_column('C:C', 20)
@@ -434,6 +440,8 @@ class Cp2xlsx:
                 self.write(ws, row, extra_rows, 9, 0, time, style['default'])
                 self.write(ws, row, extra_rows, 10, 0, install_on, style['default'])
                 self.write(ws, row, extra_rows, 11, 0, comments, style['default'])
+                for i in range(extra_rows + 1):
+                    ws.set_row(row + i, None, None, {'level': 1, 'hidden': True})
                 row = row + extra_rows
             row = row + 1
 
@@ -441,6 +449,8 @@ class Cp2xlsx:
         """ NAT page generation
         """
         ws = self.wb.add_worksheet(name)
+        ws.outline_settings(True, False)
+
         ws.set_column('A:A', 5)
         ws.set_column('B:C', 50)
         ws.set_column('D:D', 20)
@@ -485,6 +495,7 @@ class Cp2xlsx:
                 self.write(ws, row, 0, 6, 0, t_service, style['default'])
                 self.write(ws, row, 0, 7, 0, install_on, style['default'])
                 self.write(ws, row, 0, 8, 0, comments, style['default'])
+                ws.set_row(row, None, None, {'level': 1, 'hidden': True})
             row = row + 1
 
     def gen_tp_sheet(self, name: str, tp_table: json) -> None:
@@ -551,8 +562,6 @@ class Cp2xlsx:
 
 
 def main(args):
-
-
     def check_user_input(user_input: str) -> bool:
         user_input = user_input.lower()
         if user_input == "y":
@@ -589,7 +598,7 @@ def main(args):
     if args.show_members == args.no_show_members:
         sm = None
         while sm is None:
-            sm = input("Whould you like to show group members? [Y/n]: ")
+            sm = input("Would you like to show group members? [Y/n]: ")
             if sm == "":
                 sm = True
             else:
