@@ -7,6 +7,7 @@ authors = ["Alexander Bodrukhin <bodrukhinaa@sibintek.ru>"]
 [tool.poetry.dependencies]
 python = ">=3.9,<3.12"
 xlsxwriter = "^3.0.9"
+tqdm = "^4.65.0"
 
 [tool.poetry.dev-dependencies]
 

@@ -1,18 +1,19 @@
 import fnmatch
 import sys
 import time
-from threading import Thread
+# from threading import Thread
 import tarfile
 import json
 
 import argparse
 import xlsxwriter
+from tqdm import tqdm
 
 VERSION = '1.6'
 
 class Cp2xlsx:
-    def __init__(self, package: str, st: bool, eg: bool, sm: bool) -> None:
-        self.st = st
+    def __init__(self, package: str, eg: bool, sm: bool) -> None:
+        # self.st = st
         self.eg = eg
         self.sm = sm
         self.load_package(package)
@@ -29,30 +30,30 @@ class Cp2xlsx:
     def run(self):
         g_fw_args   = ('Global FW', self._gnet_)
         l_fw_args   = ('Local FW', self._net_)
-        nat_args    = ('NAT', self._nat_)
-        tp_args     = ('TP', self._tp_)
+        nat_args    = ('NAT table', self._nat_)
+        tp_args     = ('TP table', self._tp_)
 
-        if self.st:
-            if self.eg:
-                self.gen_firewall_sheet(*g_fw_args)
-            self.gen_firewall_sheet(*l_fw_args)
-            self.gen_nat_sheet(*nat_args)
-            self.gen_tp_sheet(*tp_args)
-        else:
-            threads = []
-            if self._gnet_ and self.eg:
-                threads.append(Thread(target=self.gen_firewall_sheet, args=g_fw_args))
-            if self._net_:
-                threads.append(Thread(target=self.gen_firewall_sheet, args=l_fw_args))
-            if self._nat_:
-                threads.append(Thread(target=self.gen_nat_sheet, args=nat_args))
-            if self._tp_:
-                threads.append(Thread(target=self.gen_tp_sheet, args=tp_args))
+        # if self.st:
+        if self.eg:
+            self.gen_firewall_sheet(*g_fw_args)
+        self.gen_firewall_sheet(*l_fw_args)
+        self.gen_nat_sheet(*nat_args)
+        self.gen_tp_sheet(*tp_args)
+        # else:
+        #     threads = []
+        #     if self._gnet_ and self.eg:
+        #         threads.append(Thread(target=self.gen_firewall_sheet, args=g_fw_args))
+        #     if self._net_:
+        #         threads.append(Thread(target=self.gen_firewall_sheet, args=l_fw_args))
+        #     if self._nat_:
+        #         threads.append(Thread(target=self.gen_nat_sheet, args=nat_args))
+        #     if self._tp_:
+        #         threads.append(Thread(target=self.gen_tp_sheet, args=tp_args))
 
-            for thread in threads:
-                thread.start()
-            for thread in threads:
-                thread.join()
+        #     for thread in threads:
+        #         thread.start()
+        #     for thread in threads:
+        #         thread.join()
 
 
     def get_filename(self) -> str:
@@ -382,7 +383,7 @@ class Cp2xlsx:
         ws.freeze_panes(1, 0)
 
         row = 1
-        for entry in net_table:
+        for entry in tqdm(net_table, desc=name, ncols=100, bar_format='{desc}\t: |{bar}| {n_fmt:5}/{total_fmt:5} [{elapsed_s:.2f}s]'):
             if entry['type'] == "place-holder":
                 self.write(ws, row, 0, 0, 0, str(entry['rule-number']), self.style_placeholder)
                 self.write(ws, row, 0, 1, 10, entry['name'], self.style_placeholder)
@@ -441,7 +442,7 @@ class Cp2xlsx:
                 self.write(ws, row, extra_rows, 10, 0, install_on, style['default'])
                 self.write(ws, row, extra_rows, 11, 0, comments, style['default'])
                 for i in range(extra_rows + 1):
-                    ws.set_row(row + i, None, None, {'level': 1, 'hidden': True})
+                    ws.set_row(row + i, None, None, {'level': 1, 'hidden': False})
                 row = row + extra_rows
             row = row + 1
 
@@ -471,7 +472,7 @@ class Cp2xlsx:
         ws.freeze_panes(1, 0)
 
         row = 1
-        for entry in nat_table:
+        for entry in tqdm(nat_table, desc=name, ncols=100, bar_format='{desc}\t: |{bar}| {n_fmt:5}/{total_fmt:5} [{elapsed_s:.2f}s]'):
             if entry['type'] == "nat-section":
                 self.write(ws, row, 0, 0, 8, entry['name'], self.style_section)
             else:
@@ -495,7 +496,7 @@ class Cp2xlsx:
                 self.write(ws, row, 0, 6, 0, t_service, style['default'])
                 self.write(ws, row, 0, 7, 0, install_on, style['default'])
                 self.write(ws, row, 0, 8, 0, comments, style['default'])
-                ws.set_row(row, None, None, {'level': 1, 'hidden': True})
+                ws.set_row(row, None, None, {'level': 1, 'hidden': False})
             row = row + 1
 
     def gen_tp_sheet(self, name: str, tp_table: json) -> None:
@@ -524,7 +525,7 @@ class Cp2xlsx:
         ws.freeze_panes(1, 0)
 
         row = 1
-        for entry in tp_table:
+        for entry in tqdm(tp_table, desc=name, ncols=100, bar_format='{desc}\t: |{bar}| {n_fmt:5}/{total_fmt:5} [{elapsed_s:.2f}s]'):
             if entry['type'] == "threat-section":
                 self.write(ws, row, 0, 0, 10, entry['name'], self.style_section)
             else:
@@ -574,7 +575,7 @@ def main(args):
     print("https://github.com/a5trocat/cp2xlsx")
 
     parser = argparse.ArgumentParser(prog="cp2xlsx", description="Convert Check Point policy package to xlsx")
-    parser.add_argument("-st", "--single-thread", action="store_true", help="use single thread")
+    # parser.add_argument("-st", "--single-thread", action="store_true", help="use single thread")
     eg_group = parser.add_mutually_exclusive_group()
     eg_group.add_argument("-eg", "--export-global", action="store_true", help="export global firewall rules")
     eg_group.add_argument("-neg", "--no-export-global", action="store_true")
@@ -607,7 +608,7 @@ def main(args):
         sm = args.show_members or not args.no_show_members
 
     start_time = time.perf_counter()
-    cp = Cp2xlsx(args.file, args.single_thread, eg, sm)
+    cp = Cp2xlsx(args.file, eg, sm)
     file = cp.get_filename()
     end_time = time.perf_counter()
     print(f'File {file} was converted in {end_time - start_time: 0.2f} seconds.')
