@@ -1,7 +1,6 @@
 import fnmatch
 import sys
 import time
-# from threading import Thread
 import tarfile
 import json
 
@@ -9,11 +8,10 @@ import argparse
 import xlsxwriter
 from tqdm import tqdm
 
-VERSION = '1.6'
+VERSION = '1.6.1'
 
 class Cp2xlsx:
     def __init__(self, package: str, eg: bool, sm: bool) -> None:
-        # self.st = st
         self.eg = eg
         self.sm = sm
         self.load_package(package)
@@ -28,32 +26,23 @@ class Cp2xlsx:
         self.wb.close()
 
     def run(self):
-        g_fw_args   = ('Global FW', self._gnet_)
-        l_fw_args   = ('Local FW', self._net_)
-        nat_args    = ('NAT table', self._nat_)
-        tp_args     = ('TP table', self._tp_)
-
-        # if self.st:
         if self.eg:
-            self.gen_firewall_sheet(*g_fw_args)
-        self.gen_firewall_sheet(*l_fw_args)
-        self.gen_nat_sheet(*nat_args)
-        self.gen_tp_sheet(*tp_args)
-        # else:
-        #     threads = []
-        #     if self._gnet_ and self.eg:
-        #         threads.append(Thread(target=self.gen_firewall_sheet, args=g_fw_args))
-        #     if self._net_:
-        #         threads.append(Thread(target=self.gen_firewall_sheet, args=l_fw_args))
-        #     if self._nat_:
-        #         threads.append(Thread(target=self.gen_nat_sheet, args=nat_args))
-        #     if self._tp_:
-        #         threads.append(Thread(target=self.gen_tp_sheet, args=tp_args))
-
-        #     for thread in threads:
-        #         thread.start()
-        #     for thread in threads:
-        #         thread.join()
+            if len(self._gnet_) == 0:
+                print("Global FW is empty.")
+            else:
+                self.gen_firewall_sheet('Global FW', self._gnet_)
+        if len(self._net_) == 0:
+            print("Local FW is empty.")
+        else:
+            self.gen_firewall_sheet('Local FW', self._net_)
+        if len(self._nat_) == 0:
+            print("NAT is empty.")
+        else:
+            self.gen_nat_sheet('NAT table', self._nat_)
+        if len(self._tp_) == 0:
+            print("TP is empty")
+        else:
+            self.gen_tp_sheet('TP table', self._tp_)
 
 
     def get_filename(self) -> str:
@@ -528,37 +517,42 @@ class Cp2xlsx:
         for entry in tqdm(tp_table, desc=name, ncols=100, bar_format='{desc}\t: |{bar}| {n_fmt:5}/{total_fmt:5} [{elapsed_s:.2f}s]'):
             if entry['type'] == "threat-section":
                 self.write(ws, row, 0, 0, 10, entry['name'], self.style_section)
-            else:
+                row = row + 1
+                continue
+            elif entry['type'] == "threat-rule":
                 rule_number = str(entry['rule-number'])
-                name = entry.get('name', '')
-                p_scope = self.list_to_str(self.objects_to_str(self.expand_group(entry['protected-scope'])))
-                source = self.list_to_str(self.objects_to_str(self.expand_group(entry['source'])))
-                destination = self.list_to_str(self.objects_to_str(self.expand_group(entry['destination'])))
                 p_site = 'N/A'
-                service = self.list_to_str(self.objects_to_str(self.expand_group(entry['service'])))
-                action = self.list_to_str(self.objects_to_str(entry['action']))
-                track = self.list_to_str(self.objects_to_str(entry['track']))
-                install_on = self.list_to_str(self.objects_to_str(self.expand_group(entry['install-on'])))
-                comments = entry['comments']
-                style = self.get_style(
-                    enabled=entry['enabled'],
-                    src_neg=entry['source-negate'],
-                    dst_neg=entry['destination-negate'],
-                    serv_neg=entry['service-negate'],
-                    ps_neg=entry['protected-scope-negate']
-                    )
+            elif entry['type'] == "threat-exception":
+                rule_number = 'E' + str(entry['exception-number'])
+                p_site = self.list_to_str(self.objects_to_str(self.expand_group(entry['protection-or-site'])))
+            name = entry.get('name', '')
+            p_scope = self.list_to_str(self.objects_to_str(self.expand_group(entry['protected-scope'])))
+            source = self.list_to_str(self.objects_to_str(self.expand_group(entry['source'])))
+            destination = self.list_to_str(self.objects_to_str(self.expand_group(entry['destination'])))
+            service = self.list_to_str(self.objects_to_str(self.expand_group(entry['service'])))
+            action = self.list_to_str(self.objects_to_str(entry['action']))
+            track = self.list_to_str(self.objects_to_str(entry['track']))
+            install_on = self.list_to_str(self.objects_to_str(self.expand_group(entry['install-on'])))
+            comments = entry['comments']
+            style = self.get_style(
+                enabled=entry['enabled'],
+                src_neg=entry['source-negate'],
+                dst_neg=entry['destination-negate'],
+                serv_neg=entry['service-negate'],
+                ps_neg=entry['protected-scope-negate']
+                )
 
-                self.write(ws, row, 0, 0, 0, rule_number, style['default'])
-                self.write(ws, row, 0, 1, 0, name, style['default'])
-                self.write(ws, row, 0, 2, 0, p_scope, style['protection-scope'])
-                self.write(ws, row, 0, 3, 0, source, style['source'])
-                self.write(ws, row, 0, 4, 0, destination, style['destination'])
-                self.write(ws, row, 0, 5, 0, p_site, style['default'])
-                self.write(ws, row, 0, 6, 0, service, style['service'])
-                self.write(ws, row, 0, 7, 0, action, style['default'])
-                self.write(ws, row, 0, 8, 0, track, style['default'])
-                self.write(ws, row, 0, 9, 0, install_on, style['default'])
-                self.write(ws, row, 0, 10, 0, comments, style['default'])
+            self.write(ws, row, 0, 0, 0, rule_number, style['default'])
+            self.write(ws, row, 0, 1, 0, name, style['default'])
+            self.write(ws, row, 0, 2, 0, p_scope, style['protection-scope'])
+            self.write(ws, row, 0, 3, 0, source, style['source'])
+            self.write(ws, row, 0, 4, 0, destination, style['destination'])
+            self.write(ws, row, 0, 5, 0, p_site, style['default'])
+            self.write(ws, row, 0, 6, 0, service, style['service'])
+            self.write(ws, row, 0, 7, 0, action, style['default'])
+            self.write(ws, row, 0, 8, 0, track, style['default'])
+            self.write(ws, row, 0, 9, 0, install_on, style['default'])
+            self.write(ws, row, 0, 10, 0, comments, style['default'])
             row = row + 1
 
 
@@ -575,7 +569,6 @@ def main(args):
     print("https://github.com/a5trocat/cp2xlsx")
 
     parser = argparse.ArgumentParser(prog="cp2xlsx", description="Convert Check Point policy package to xlsx")
-    # parser.add_argument("-st", "--single-thread", action="store_true", help="use single thread")
     eg_group = parser.add_mutually_exclusive_group()
     eg_group.add_argument("-eg", "--export-global", action="store_true", help="export global firewall rules")
     eg_group.add_argument("-neg", "--no-export-global", action="store_true")
