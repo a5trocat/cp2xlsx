@@ -1,19 +1,21 @@
+import argparse
 import fnmatch
 import sys
 import time
+from pathlib import Path
 import tarfile
 import json
 
-import argparse
 import xlsxwriter
 from tqdm import tqdm
 
-VERSION = '1.6.1'
+VERSION = '1.7.0'
 
 class Cp2xlsx:
-    def __init__(self, package: str, eg: bool, sm: bool) -> None:
+    def __init__(self, package: str, eg: bool, sm: bool, sg: str) -> None:
         self.eg = eg
         self.sm = sm
+        self.sg = sg
         self.load_package(package)
         self.verify_package()
         self.package_name = self._index_['policyPackages'][0]['packageName']
@@ -23,7 +25,7 @@ class Cp2xlsx:
         self._cached_objects_ = {}
         self._cached_uids_ = {}
         self.run()
-        self.wb.close()
+
 
     def run(self):
         if self.eg:
@@ -43,6 +45,44 @@ class Cp2xlsx:
             print("TP is empty")
         else:
             self.gen_tp_sheet('TP table', self._tp_)
+        if self.sg != "no":
+            self.save_groups_to_files()
+        self.wb.close()
+
+
+    def save_groups_to_files(self):
+        # create dir for txt files. empty dir if it exists
+        dir_path = Path(f"./{self.package_name}")
+        if dir_path.exists():
+            if dir_path.is_dir():
+                for file in dir_path.iterdir():
+                    file.unlink()
+            else:
+                dir_path.unlink()
+        else:
+            dir_path.mkdir()
+
+        groups: list[dict] = []
+        groups_to_iterate = self._cached_groups_ if self.sg == "policy" else self._objects_
+        for obj in tqdm(groups_to_iterate, desc="Saving groups", ncols=100, bar_format='{desc}\t: |{bar}| {n_fmt:5}/{total_fmt:5} [{elapsed_s:.2f}s]'):
+            if self.sg == "all":
+                obj_decoded = self.find_obj_by_uid(obj["uid"])
+            else:
+                obj_decoded = self.find_obj_by_uid(obj)
+            if 'group' in obj_decoded['type']:
+                group = {}
+                group["name"] = obj_decoded["name"]
+                group["members"] = []
+                for group_member in obj_decoded["members"]:
+                    member = self.object_to_str(group_member["uid"])
+                    group["members"].append(member)
+                groups.append(group)
+
+        for group in groups:
+            file_path = dir_path / f"{group["name"]}.txt"
+            with file_path.open("w", encoding="UTF-8") as file:
+                for member in group["members"]:
+                    file.write(member + "\n")
 
 
     def get_filename(self) -> str:
@@ -52,6 +92,7 @@ class Cp2xlsx:
             str: file name
         """
         return self.wb.filename
+
 
     def verify_package(self) -> None:
         """ Check if all files from archive were loaded
@@ -74,6 +115,7 @@ class Cp2xlsx:
             print("File '*Threat Prevention*.json' is not found. Skipping Threat Prevention table...")
         if self._gwobj_ is None:
             print("File '*gateway_objects.json' is not found.")
+
 
     def init_styles(self) -> None:
         """ Init workbook styles
@@ -107,6 +149,7 @@ class Cp2xlsx:
 
         data_temp_neg = {**data_neg, **data_temp}
         self.style_data_temp_neg = self.wb.add_format(data_temp_neg)
+
 
     def get_style(self, enabled: bool=True, temp: bool=False, src_neg: bool=False, dst_neg: bool=False, serv_neg: bool=False, ps_neg: bool=False) -> dict:
         """Get style for each cell in row
@@ -142,6 +185,7 @@ class Cp2xlsx:
             serv = self.style_data_dis_neg if serv_neg else default
             ps = self.style_data_dis_neg if ps_neg else default
         return {"default": default, "source": src, "destination": dst, "service": serv, "protection-scope": ps}
+
 
     def load_package(self, package: str) -> None:
         """ Open policy package archive and load JSONs into memory
@@ -180,6 +224,7 @@ class Cp2xlsx:
                     with archive.extractfile(file) as f:
                         self._objects_ = json.loads(f.readline())
 
+
     def find_obj_by_uid(self, uid: str) -> dict | None:
         """ Find object by uid
 
@@ -196,6 +241,7 @@ class Cp2xlsx:
                 self._cached_uids_[uid] = obj
                 return obj
         return None
+
 
     def object_to_str(self, uid: str) -> str:
         """ Represent object with a string
@@ -232,6 +278,7 @@ class Cp2xlsx:
         self._cached_objects_[uid] = result
         return result
 
+
     def objects_to_str(self, uids: list | str) -> list:
         """ Represent objects in list with a string
 
@@ -248,6 +295,7 @@ class Cp2xlsx:
             result.append(self.object_to_str(uid))
         return result
 
+
     @staticmethod
     def list_to_str(l: list) -> str:
         """ Convert list to string with new line
@@ -261,6 +309,7 @@ class Cp2xlsx:
         if not isinstance(l, list):
             return l
         return '\n'.join(l)
+
 
     def expand_group(self, uids: list | str) -> list:
         """ Recursively expand group object.
@@ -281,14 +330,16 @@ class Cp2xlsx:
                 result = result + self._cached_groups_[uid]
                 continue
             obj = self.find_obj_by_uid(uid)
-            if 'group' in obj['type'] and self.sm:
+            if 'group' in obj['type']:
                 expanded = self.expand_group(obj['members'])
-                result = result + expanded
                 self._cached_groups_[uid] = expanded
+                if self.sm:
+                    result = result + expanded
             else:
                 result = result + [uid]
         # return result without duplicates
         return list(dict.fromkeys(result))
+
 
     @staticmethod
     def write(ws: xlsxwriter.workbook.Worksheet, row: int, extra_row: int, col: int, extra_col: int, data: str, format: xlsxwriter.workbook.Format):
@@ -308,6 +359,7 @@ class Cp2xlsx:
         else:
             ws.write(row, col, data, format)
 
+
     @staticmethod
     def split_string(string: str) -> list:
         """ Split string with len() > 32767 to comply with xlsx cell's max len
@@ -326,6 +378,7 @@ class Cp2xlsx:
         result.append(string)
         return result
 
+
     @staticmethod
     def format_hits(num: int) -> str:
         ds = [(1e15, 'Q'), (1e12, 'T'), (1e9, 'B'), (1e6, 'M'), (1e3, 'K')]
@@ -334,6 +387,7 @@ class Cp2xlsx:
             if head > 1:
                 return f"{head:.0f}{d[1]}"
         return str(num)
+
 
     def gen_firewall_sheet(self, name: str, net_table: json) -> None:
         """Firewall page generation
@@ -435,6 +489,7 @@ class Cp2xlsx:
                 row = row + extra_rows
             row = row + 1
 
+
     def gen_nat_sheet(self, name: str, nat_table: json) -> None:
         """ NAT page generation
         """
@@ -487,6 +542,7 @@ class Cp2xlsx:
                 self.write(ws, row, 0, 8, 0, comments, style['default'])
                 ws.set_row(row, None, None, {'level': 1, 'hidden': False})
             row = row + 1
+
 
     def gen_tp_sheet(self, name: str, tp_table: json) -> None:
         """ Threat prevention page generation
@@ -568,13 +624,14 @@ def main(args):
     print(f"cp2xlsx80 ver. {VERSION}")
     print("https://github.com/a5trocat/cp2xlsx")
 
-    parser = argparse.ArgumentParser(prog="cp2xlsx", description="Convert Check Point policy package to xlsx")
+    parser = argparse.ArgumentParser(prog="cp2xlsx", description="Convert Check Point policy package to xlsx", formatter_class=argparse.RawTextHelpFormatter)
     eg_group = parser.add_mutually_exclusive_group()
     eg_group.add_argument("-eg", "--export-global", action="store_true", help="export global firewall rules")
     eg_group.add_argument("-neg", "--no-export-global", action="store_true")
     sm_group = parser.add_mutually_exclusive_group()
     sm_group.add_argument("-sm", "--show-members", action="store_true", help="show group members")
     sm_group.add_argument("-nsm", "--no-show-members", action="store_true")
+    parser.add_argument("-sg", "--save-groups", choices=["no", "policy", "all"], required=False, default=None, help="save group members to files (default: %(default)s)\npolicy: save groups only used in the policy\nall: save all groups from CMA (slow)")
     parser.add_argument("file", help="path to policy package file", )
     args = parser.parse_args()
 
@@ -600,8 +657,16 @@ def main(args):
     else:
         sm = args.show_members or not args.no_show_members
 
+    if not args.save_groups:
+        sg = input("Would you like to save group members to file? [NO/policy/all]: ")
+        sg = sg.lower()
+        if sg not in ["policy", "all"]:
+            sg = "no"
+    else:
+        sg = args.save_groups
+
     start_time = time.perf_counter()
-    cp = Cp2xlsx(args.file, eg, sm)
+    cp = Cp2xlsx(args.file, eg, sm, sg)
     file = cp.get_filename()
     end_time = time.perf_counter()
     print(f'File {file} was converted in {end_time - start_time: 0.2f} seconds.')
