@@ -631,7 +631,7 @@ def main(args):
     sm_group = parser.add_mutually_exclusive_group()
     sm_group.add_argument("-sm", "--show-members", action="store_true", help="show group members")
     sm_group.add_argument("-nsm", "--no-show-members", action="store_true")
-    parser.add_argument("-sg", "--save-groups", choices=["no", "policy", "all"], required=False, default=None, help="save group members to files (default: %(default)s)\npolicy: save groups only used in the policy\nall: save all groups from CMA (slow)")
+    parser.add_argument("-sg", "--save-groups", choices=["no", "policy", "all"], required=False, default=None, help="save group members to files (default: no)\npolicy: save groups only used in the policy\nall: save all groups from CMA (slow)")
     parser.add_argument("file", help="path to policy package file", )
     args = parser.parse_args()
 
