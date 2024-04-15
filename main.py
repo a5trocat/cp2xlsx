@@ -9,7 +9,7 @@ import json
 import xlsxwriter
 from tqdm import tqdm
 
-VERSION = '1.7.0'
+VERSION = '1.7.1'
 
 class Cp2xlsx:
     def __init__(self, package: str, eg: bool, sm: bool, sg: str) -> None:
@@ -64,7 +64,7 @@ class Cp2xlsx:
 
         groups: list[dict] = []
         groups_to_iterate = self._cached_groups_ if self.sg == "policy" else self._objects_
-        for obj in tqdm(groups_to_iterate, desc="Saving groups", ncols=100, bar_format='{desc}\t: |{bar}| {n_fmt:5}/{total_fmt:5} [{elapsed_s:.2f}s]'):
+        for obj in tqdm(groups_to_iterate, desc="Parsing groups", ncols=100, bar_format='{desc}\t: |{bar}| {n_fmt:5}/{total_fmt:5} [{elapsed_s:.2f}s]'):
             if self.sg == "all":
                 obj_decoded = self.find_obj_by_uid(obj["uid"])
             else:
@@ -78,7 +78,7 @@ class Cp2xlsx:
                     group["members"].append(member)
                 groups.append(group)
 
-        for group in groups:
+        for group in tqdm(groups, desc="Saving groups", ncols=100, bar_format='{desc}\t: |{bar}| {n_fmt:5}/{total_fmt:5} [{elapsed_s:.2f}s]'):
             file_path = dir_path / f"{group["name"]}.txt"
             with file_path.open("w", encoding="UTF-8") as file:
                 for member in group["members"]:
@@ -311,7 +311,7 @@ class Cp2xlsx:
         return '\n'.join(l)
 
 
-    def expand_group(self, uids: list | str) -> list:
+    def expand_group(self, uids: list | str) -> list[str]:
         """ Recursively expand group object.
 
         Args:
@@ -327,7 +327,10 @@ class Cp2xlsx:
             if not isinstance(uid, str):
                 uid = uid['uid']
             if uid in self._cached_groups_:
-                result = result + self._cached_groups_[uid]
+                if self.sm:
+                    result = result + self._cached_groups_[uid]
+                else:
+                    result = result + [uid]
                 continue
             obj = self.find_obj_by_uid(uid)
             if 'group' in obj['type']:
@@ -335,8 +338,7 @@ class Cp2xlsx:
                 self._cached_groups_[uid] = expanded
                 if self.sm:
                     result = result + expanded
-            else:
-                result = result + [uid]
+            result = result + [uid]
         # return result without duplicates
         return list(dict.fromkeys(result))
 
@@ -631,7 +633,7 @@ def main(args):
     sm_group = parser.add_mutually_exclusive_group()
     sm_group.add_argument("-sm", "--show-members", action="store_true", help="show group members")
     sm_group.add_argument("-nsm", "--no-show-members", action="store_true")
-    parser.add_argument("-sg", "--save-groups", choices=["no", "policy", "all"], required=False, default=None, help="save group members to files (default: no)\npolicy: save groups only used in the policy\nall: save all groups from CMA (slow)")
+    parser.add_argument("-sg", "--save-groups", choices=["no", "policy", "all"], required=False, default=None, help="save group members to files (default: no)\npolicy: save groups only used in the policy\nall: save all groups")
     parser.add_argument("file", help="path to policy package file", )
     args = parser.parse_args()
 

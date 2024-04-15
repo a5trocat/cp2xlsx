@@ -21,7 +21,7 @@ cp2xlsx [-h] [-eg | -neg] [-sm | -nsm] [-sg {no,policy,all}] file
 * ```-nsm, --no-show-members```: don't show group members
 * ```-sg {no,policy,all}, --save-groups {no,policy,all}```: save group members to files (default: no)
     * policy: save groups only used in the policy
-    * all: save all groups from CMA (slow)
+    * all: save all groups
 * ```file```: path to compressed file you got from [ShowPolicyPackage](https://github.com/CheckPointSW/ShowPolicyPackage)
 
 ### Output
