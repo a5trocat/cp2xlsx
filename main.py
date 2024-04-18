@@ -9,7 +9,7 @@ import json
 import xlsxwriter
 from tqdm import tqdm
 
-VERSION = '1.7.1'
+VERSION = '1.7.2'
 
 class Cp2xlsx:
     def __init__(self, package: str, eg: bool, sm: bool, sg: str) -> None:
@@ -271,7 +271,13 @@ class Cp2xlsx:
         elif obj['type'] == 'CpmiAnyObject':
             result = "Any"
         elif obj['type'] == 'time':
-            result = f"{obj['end']['iso-8601'][:-3].replace('T', ' ')}"
+            if obj['end-never']:
+                result = obj['name']
+                if obj['comments']:
+                    result += f' ({obj['comments']})'
+            else:
+                result = f"{obj['end']['iso-8601'][:-3].replace('T', ' ')}"
+            
         else:
             result = obj['name']
 
