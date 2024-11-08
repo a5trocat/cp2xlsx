@@ -2,6 +2,8 @@
 # Edit at https://www.toptal.com/developers/gitignore?templates=python,virtualenv,git
 ### Test packages ###
 test_packages/
+*.xls
+*.xlsx
 
 ### Git ###
 # Created by git for backups. To disable backups in Git:
